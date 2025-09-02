@@ -67,6 +67,7 @@ export default function Home() {
   const [isSchedulingDialogOpen, setIsSchedulingDialogOpen] = useState(false);
   const [interviewDate, setInterviewDate] = useState<Date | undefined>();
   const [interviewTime, setInterviewTime] = useState("10:00");
+  const [scheduledDates, setScheduledDates] = useState<Date[]>([]);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [isGeneratingEmails, setIsGeneratingEmails] = useState(false);
   const [emailDrafts, setEmailDrafts] = useState<EmailDraft[]>([]);
@@ -309,7 +310,7 @@ export default function Home() {
   };
 
   const handleSendEmails = async () => {
-    if (emailDrafts.length === 0) return;
+    if (emailDrafts.length === 0 || !interviewDate) return;
     setIsSendingEmails(true);
     try {
       await Promise.all(
@@ -321,6 +322,16 @@ export default function Home() {
         })
       );
       toast({ title: 'Emails sent successfully!' });
+      
+      // Add the date to the list of scheduled dates to be shown on the calendar
+      setScheduledDates(prev => {
+        // Avoid adding duplicate dates
+        if (prev.some(d => d.getTime() === interviewDate.getTime())) {
+          return prev;
+        }
+        return [...prev, interviewDate];
+      });
+
        // Here you would also trigger the Google Calendar event creation
        // For now, we'll just log it.
       console.log('TODO: Trigger Google Calendar event creation for date:', interviewDate, 'and time:', interviewTime);
@@ -467,6 +478,8 @@ export default function Home() {
             <CardContent>
                 <Calendar
                     mode="multiple"
+                    selected={scheduledDates}
+                    onSelect={setScheduledDates}
                     className="p-0"
                 />
             </CardContent>
@@ -589,5 +602,3 @@ export default function Home() {
     </div>
   );
 }
-
-    
