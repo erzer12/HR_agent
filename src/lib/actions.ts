@@ -258,52 +258,19 @@ export async function createCalendarEvent(details: { title: string, startTime: s
     return;
   }
   
-  // 1. Check if user has valid, stored OAuth tokens.
-  // 2. If not, initiate the OAuth flow. This cannot be done in a simple server action
-  //    and requires dedicated API routes for the auth callback.
-  // 3. If tokens are present, use them to instantiate a googleapis client.
-  // 4. Create the event.
+  // A full implementation would first retrieve the stored tokens for the user,
+  // set them on the oAuth2Client, and then make the API call.
+  // oAuth2Client.setCredentials(tokens);
 
-  console.log("--- GOOGLE CALENDAR INTEGRATION ---");
-  console.log("This is a placeholder for creating a calendar event.");
+  console.log("--- GOOGLE CALENDAR INTEGRATION (Placeholder) ---");
+  console.log("This placeholder simulates creating a calendar event.");
   console.log("Event Details:", details);
-  console.log("To implement this, you need to complete the OAuth 2.0 flow to get user permission and tokens.");
-  console.log("See `src/lib/actions.ts` for more details.");
-
-  // Example of what the call would look like with the 'googleapis' library
-  /*
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET, // This MUST be stored securely on the server
-    // The redirect URI used in the OAuth flow
-    // e.g., "http://localhost:3000/api/auth/google/callback" 
-  );
   
-  // You would fetch these tokens from your secure storage (e.g., Firestore) for the user
-  const tokens = { 
-    access_token: 'USER_ACCESS_TOKEN',
-    refresh_token: 'USER_REFRESH_TOKEN' 
-  };
-  oauth2Client.setCredentials(tokens);
+  // This is the point where you would use the authenticated oAuth2Client.
+  // The client is already configured with your app's credentials.
+  // The final step is to set the user's tokens on it before making the call.
+  const calendar = google.calendar({ version: 'v3', auth: oAuth2Client });
 
-  const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-  try {
-    await calendar.events.insert({
-      calendarId: 'primary',
-      requestBody: {
-        summary: details.title,
-        description: `Interview with ${details.attendeeEmail}`,
-        start: { dateTime: details.startTime, timeZone: 'UTC' },
-        end: { dateTime: details.endTime, timeZone: 'UTC' },
-        attendees: [{ email: details.attendeeEmail }],
-      },
-    });
-    console.log('Calendar event created successfully.');
-  } catch (error) {
-    console.error('Failed to create calendar event:', error);
-    // If the access token was expired, the googleapis library with a refresh token
-    // would typically handle refreshing it. If it fails for other reasons, we throw.
-    throw new Error('Could not create calendar event.');
-  }
-  */
+  console.log("Successfully created a calendar instance with the authenticated client.");
+  console.log("To fully implement this, you must store and retrieve user OAuth tokens securely.");
 }
