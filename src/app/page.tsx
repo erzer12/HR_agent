@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { ChangeEvent } from "react";
-import { rankCandidates } from "@/ai/flows/rank-candidates-against-job-description";
 import { useToast } from "@/hooks/use-toast";
 
-import type { ClientCandidate } from "@/lib/types";
+import type { ClientCandidate, Job } from "@/lib/types";
+import { db } from "@/lib/firebase";
+import { collection, query, onSnapshot, orderBy, doc, getDoc } from "firebase/firestore";
+import { createJobAndRankCandidates } from "@/lib/actions";
+
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,8 +20,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { CandidateCard } from "@/components/candidate-card";
 import { EmailPreviewDialog } from "@/components/email-preview-dialog";
 import { Logo } from "@/components/logo";
+import { JobListItem } from "@/components/job-list-item";
+import { formatDistanceToNow } from "date-fns";
 
-import { UploadCloud, Sparkles, Users, FileText, Crown, Mail, Loader2, Calendar, Clock, User } from "lucide-react";
+import { UploadCloud, Sparkles, Users, FileText, Crown, Mail, Loader2, Calendar, Clock, User, PlusCircle, Briefcase } from "lucide-react";
 
 type EmailDraft = {
   candidateName: string;
@@ -28,34 +33,109 @@ type EmailDraft = {
 
 export default function Home() {
   const { toast } = useToast();
+  
+  // New state for multi-job architecture
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<ClientCandidate[]>([]);
+  const [isJobsLoading, setIsJobsLoading] = useState(true);
+  const [isCandidatesLoading, setIsCandidatesLoading] = useState(false);
+  
+  // State for the "New Job" dialog
+  const [isNewJobDialogOpen, setIsNewJobDialogOpen] = useState(false);
   const [jobDescription, setJobDescription] = useState("");
   const [files, setFiles] = useState<File[]>([]);
-  const [candidates, setCandidates] = useState<ClientCandidate[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isCreatingJob, setIsCreatingJob] = useState(false);
+
+  // Existing state for actions on candidates
   const [topN, setTopN] = useState("3");
-  
   const [isInterviewDialogOpen, setIsInterviewDialogOpen] = useState(false);
   const [interviewDetails, setInterviewDetails] = useState({ date: "", time: "", interviewer: "" });
   const [isEmailLoading, setIsEmailLoading] = useState(false);
   const [emailDrafts, setEmailDrafts] = useState<EmailDraft[]>([]);
   const [isEmailPreviewOpen, setIsEmailPreviewOpen] = useState(false);
 
+
+  // Effect to load jobs from Firestore
+  useEffect(() => {
+    const q = query(collection(db, "jobs"), orderBy("createdAt", "desc"));
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const jobsData: Job[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        jobsData.push({
+          id: doc.id,
+          title: data.title,
+          jobDescription: data.jobDescription,
+          createdAt: data.createdAt?.toDate(),
+          status: data.status,
+        });
+      });
+      setJobs(jobsData);
+      if (isJobsLoading) {
+        setIsJobsLoading(false);
+        if (jobsData.length > 0 && !selectedJobId) {
+            setSelectedJobId(jobsData[0].id)
+        }
+      }
+    }, (error) => {
+        console.error("Error fetching jobs:", error);
+        toast({ variant: 'destructive', title: 'Could not load jobs.'});
+        setIsJobsLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [isJobsLoading, toast, selectedJobId]);
+
+  // Effect to load candidates when a job is selected
+  useEffect(() => {
+    if (!selectedJobId) {
+        setCandidates([]);
+        return;
+    };
+
+    setIsCandidatesLoading(true);
+    const candidatesQuery = query(collection(db, "jobs", selectedJobId, "candidates"));
+    const unsubscribe = onSnapshot(candidatesQuery, (snapshot) => {
+        const newCandidates: ClientCandidate[] = [];
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            newCandidates.push({
+                id: doc.id,
+                ...data,
+                selected: false,
+                fileName: '' // fileName is not stored anymore
+            } as ClientCandidate)
+        });
+        
+        // Sort by suitability score
+        newCandidates.sort((a,b) => b.suitabilityScore - a.suitabilityScore);
+
+        setCandidates(prevCandidates => {
+            // Preserve selection state
+            const selectionMap = new Map(prevCandidates.map(c => [c.id, c.selected]));
+            return newCandidates.map(c => ({...c, selected: selectionMap.get(c.id) || false}));
+        });
+        setIsCandidatesLoading(false);
+
+    }, (error) => {
+        console.error(`Error fetching candidates for job ${selectedJobId}:`, error);
+        toast({ variant: 'destructive', title: 'Could not load candidates.'});
+        setIsCandidatesLoading(false);
+    });
+
+    return () => unsubscribe();
+
+  }, [selectedJobId, toast]);
+
+
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       setFiles(Array.from(e.target.files));
     }
   };
-
-  const fileToDataURL = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  };
   
-  const handleRankCandidates = async () => {
+  const handleCreateJob = async () => {
     if (!jobDescription.trim() || files.length === 0) {
       toast({
         variant: "destructive",
@@ -64,30 +144,26 @@ export default function Home() {
       });
       return;
     }
-    setIsLoading(true);
-    setCandidates([]);
+    setIsCreatingJob(true);
     try {
-      const resumeDataURLs = await Promise.all(files.map(fileToDataURL));
-      const result = await rankCandidates({ jobDescription, resumes: resumeDataURLs });
-      
-      const rankedCandidates: ClientCandidate[] = result.rankings.map(ranking => ({
-        id: crypto.randomUUID(),
-        ...ranking,
-        fileName: files[ranking.candidateIndex].name,
-        selected: false,
-      })).sort((a, b) => b.suitabilityScore - a.suitabilityScore);
-      
-      setCandidates(rankedCandidates);
-
+      const { jobId } = await createJobAndRankCandidates(jobDescription, files);
+      toast({
+        title: "Job Created!",
+        description: "Candidates are being ranked. The list will update automatically.",
+      });
+      setSelectedJobId(jobId);
+      setIsNewJobDialogOpen(false);
+      setJobDescription("");
+      setFiles([]);
     } catch (error) {
-      console.error("Error ranking candidates:", error);
+      console.error("Error creating job:", error);
       toast({
         variant: "destructive",
-        title: "Ranking Failed",
-        description: "An error occurred while ranking candidates. Please try again.",
+        title: "Job Creation Failed",
+        description: error instanceof Error ? error.message : "An unknown error occurred.",
       });
     } finally {
-      setIsLoading(false);
+      setIsCreatingJob(false);
     }
   };
 
@@ -110,7 +186,7 @@ export default function Home() {
     setCandidates(prev => prev.map(c => ({...c, selected: topNIds.includes(c.id)})));
   };
 
-  const handleDraftEmails = async () => {
+  const handleDraftEmails = () => {
     const selectedCandidates = candidates.filter(c => c.selected);
     if (selectedCandidates.length === 0) {
       toast({
@@ -129,10 +205,11 @@ export default function Home() {
     setIsInterviewDialogOpen(false);
     setIsEmailPreviewOpen(true);
     const selectedCandidates = candidates.filter(c => c.selected);
-    const jobTitle = "the role"; // Placeholder
+    const job = jobs.find(j => j.id === selectedJobId);
+    const jobTitle = job?.title || 'the role';
     
-    const generatedDrafts: EmailDraft[] = [];
-    for (const candidate of selectedCandidates) {
+    // This part is now much faster as it's just a template.
+    const generatedDrafts: EmailDraft[] = selectedCandidates.map(candidate => {
       const candidateName = candidate.candidateName;
       const emailSubject = `Interview Confirmation: ${jobTitle}`;
       const emailBody = `Dear ${candidateName},
@@ -149,18 +226,19 @@ We look forward to speaking with you.
 Best regards,
 The Hiring Team`;
 
-      generatedDrafts.push({
+      return {
         candidateName,
         subject: emailSubject,
         body: emailBody
-      });
-    }
+      };
+    });
     
     setEmailDrafts(generatedDrafts);
     setIsEmailLoading(false);
   };
   
   const selectedCount = candidates.filter(c => c.selected).length;
+  const selectedJob = useMemo(() => jobs.find(j => j.id === selectedJobId), [jobs, selectedJobId]);
 
   return (
     <>
@@ -170,82 +248,52 @@ The Hiring Team`;
           <h1 className="text-2xl font-bold tracking-tight font-headline">ResumeRank</h1>
         </header>
 
-        <main className="flex-1 overflow-auto p-4 md:p-6">
-          <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
-            <div className="xl:col-span-1 flex flex-col gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Sparkles className="text-primary" />
-                    Start Here
-                  </CardTitle>
-                  <CardDescription>Enter job details and upload resumes to begin.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="job-description">Job Description</Label>
-                    <Textarea
-                      id="job-description"
-                      placeholder="Paste the job description here..."
-                      value={jobDescription}
-                      onChange={(e) => setJobDescription(e.target.value)}
-                      className="min-h-[150px] text-sm"
+        <main className="flex-1 overflow-auto">
+          <div className="grid h-full lg:grid-cols-[300px_1fr]">
+            <div className="flex flex-col gap-4 p-4 border-r bg-muted/20">
+              <div className="flex justify-between items-center">
+                <h2 className="text-lg font-semibold flex items-center gap-2"><Briefcase/>Job Postings</h2>
+                <Button size="sm" onClick={() => setIsNewJobDialogOpen(true)}><PlusCircle className="mr-2"/>New Job</Button>
+              </div>
+              <div className="space-y-2 flex-1 overflow-y-auto pr-2">
+                {isJobsLoading && [...Array(3)].map((_, i) => <Skeleton key={i} className="h-16 w-full"/>)}
+                {!isJobsLoading && jobs.map(job => (
+                    <JobListItem
+                        key={job.id}
+                        job={job}
+                        isSelected={selectedJobId === job.id}
+                        onSelect={() => setSelectedJobId(job.id)}
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="resume-upload">Upload Resumes (PDF)</Label>
-                    <div className="relative">
-                      <Input id="resume-upload" type="file" multiple accept=".pdf" onChange={handleFileChange} className="pr-12 h-11" />
-                       <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                         <UploadCloud className="w-5 h-5 text-muted-foreground" />
-                       </div>
+                ))}
+                {!isJobsLoading && jobs.length === 0 && (
+                    <div className="text-center text-muted-foreground p-8">
+                        <p>No jobs found.</p>
+                        <p className="text-sm">Create one to get started.</p>
                     </div>
-                     {files.length > 0 && <p className="text-sm text-muted-foreground">{files.length} file(s) selected.</p>}
-                  </div>
-                   <Button onClick={handleRankCandidates} disabled={isLoading} className="w-full bg-primary hover:bg-primary/90">
-                    {isLoading ? <Loader2 className="animate-spin" /> : <Sparkles className="mr-2" />}
-                    Rank Candidates
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {candidates.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Crown className="text-accent" />
-                      Actions
-                    </CardTitle>
-                    <CardDescription>Manage your ranked candidates.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="top-n">Select Top Candidates</Label>
-                      <div className="flex gap-2">
-                        <Input id="top-n" type="number" value={topN} onChange={e => setTopN(e.target.value)} className="w-20" />
-                        <Button variant="outline" onClick={handleSelectTopN}>Select Top {topN}</Button>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                       <Label>Email Automation</Label>
-                       <Button onClick={handleDraftEmails} className="w-full bg-accent hover:bg-accent/90">
-                          <Mail className="mr-2" />
-                          Draft Emails for Selected ({selectedCount})
-                       </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+                )}
+              </div>
             </div>
             
-            <div className="lg:col-span-1 xl:col-span-2">
-              <Card className="h-full">
+            <div className="flex flex-col">
+              <Card className="h-full rounded-none border-0 border-b lg:border-b-0">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><Users />Ranked Candidates</CardTitle>
-                  <CardDescription>Review candidates ranked by suitability. Scores are from 0 to 100.</CardDescription>
+                    {selectedJob && (
+                        <>
+                        <CardTitle className="flex items-center gap-2"><Users />Ranked Candidates for {selectedJob.title}</CardTitle>
+                        <CardDescription>
+                            {`Created ${formatDistanceToNow(selectedJob.createdAt!, { addSuffix: true })}`}
+                        </CardDescription>
+                        </>
+                    )}
+                    {!selectedJob && !isJobsLoading && (
+                        <>
+                        <CardTitle>Welcome to ResumeRank</CardTitle>
+                        <CardDescription>Select a job on the left or create a new one to start ranking candidates.</CardDescription>
+                        </>
+                    )}
                 </CardHeader>
                 <CardContent>
-                  {isLoading && (
+                  {(isCandidatesLoading || (selectedJob?.status === 'processing' && candidates.length === 0)) && (
                      <div className="space-y-4">
                         {[...Array(3)].map((_, i) => (
                            <div key={i} className="p-4 border rounded-lg space-y-3">
@@ -259,15 +307,15 @@ The Hiring Team`;
                         ))}
                      </div>
                   )}
-                  {!isLoading && candidates.length === 0 && (
+                  {!isCandidatesLoading && selectedJobId && candidates.length === 0 && selectedJob?.status !== 'processing' &&(
                     <div className="flex flex-col items-center justify-center text-center p-8 border-2 border-dashed rounded-lg h-96">
                       <FileText className="w-16 h-16 text-muted-foreground" />
-                      <h3 className="mt-4 text-xl font-semibold">No Candidates Yet</h3>
-                      <p className="mt-2 text-muted-foreground">Your ranked candidates will appear here.</p>
+                      <h3 className="mt-4 text-xl font-semibold">No Candidates Found</h3>
+                      <p className="mt-2 text-muted-foreground">This job posting has no candidates yet.</p>
                     </div>
                   )}
                   {candidates.length > 0 && (
-                     <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+                     <div className="space-y-4 max-h-[calc(100vh-250px)] overflow-y-auto pr-2">
                       {candidates.map(candidate => (
                         <CandidateCard key={candidate.id} candidate={candidate} onSelect={handleSelectCandidate} />
                       ))}
@@ -275,11 +323,83 @@ The Hiring Team`;
                   )}
                 </CardContent>
               </Card>
+
+              {candidates.length > 0 && (
+                <div className="p-4 border-t bg-muted/20">
+                  <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Crown className="text-accent" />
+                      Actions
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex flex-wrap gap-4 items-center">
+                    <div className="space-y-2">
+                      <Label htmlFor="top-n">Select Top N</Label>
+                      <div className="flex gap-2">
+                        <Input id="top-n" type="number" value={topN} onChange={e => setTopN(e.target.value)} className="w-20" />
+                        <Button variant="outline" onClick={handleSelectTopN}>Select</Button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                       <Label>Email Automation</Label>
+                       <Button onClick={handleDraftEmails} className="w-full bg-accent hover:bg-accent/90">
+                          <Mail className="mr-2" />
+                          Draft Emails ({selectedCount})
+                       </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+                </div>
+              )}
+
             </div>
           </div>
         </main>
       </div>
+      
+      {/* New Job Dialog */}
+      <Dialog open={isNewJobDialogOpen} onOpenChange={setIsNewJobDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Job Posting</DialogTitle>
+            <DialogDescription>
+              Enter a job description and upload resumes to start the ranking process.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="job-description">Job Description</Label>
+                <Textarea
+                  id="job-description"
+                  placeholder="Paste the job description here..."
+                  value={jobDescription}
+                  onChange={(e) => setJobDescription(e.target.value)}
+                  className="min-h-[150px] text-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="resume-upload">Upload Resumes (PDF)</Label>
+                <div className="relative">
+                  <Input id="resume-upload" type="file" multiple accept=".pdf,.doc,.docx" onChange={handleFileChange} className="pr-12 h-11" />
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                      <UploadCloud className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                </div>
+                  {files.length > 0 && <p className="text-sm text-muted-foreground">{files.length} file(s) selected.</p>}
+              </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleCreateJob} disabled={isCreatingJob} className="w-full sm:w-auto bg-primary hover:bg-primary/90">
+              {isCreatingJob ? <Loader2 className="animate-spin" /> : <Sparkles className="mr-2" />}
+              Create & Rank
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
+
+      {/* Interview Details Dialog */}
       <Dialog open={isInterviewDialogOpen} onOpenChange={setIsInterviewDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -322,7 +442,7 @@ The Hiring Team`;
         onOpenChange={setIsEmailPreviewOpen} 
         drafts={emailDrafts}
         isLoading={isEmailLoading}
-        selectedCount={candidates.filter(c => c.selected).length}
+        selectedCount={selectedCount}
       />
     </>
   );
