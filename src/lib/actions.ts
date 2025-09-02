@@ -18,19 +18,11 @@ export async function createJobAndRankCandidates(jobDescription: string, resumeF
     title: 'New Job Posting' // Placeholder title
   });
 
-  // Function to read file as data URL
-  const fileToDataURL = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = (error) => reject(error);
-        // This part runs on the server, so we need a different approach
-        // For now, we'll assume we can get the buffer and convert it
-        file.arrayBuffer().then(buffer => {
-            const b64 = Buffer.from(buffer).toString('base64');
-            resolve(`data:${file.type};base64,${b64}`);
-        }).catch(reject);
-    });
+  // Function to read file as a data URI on the server
+  const fileToDataURL = async (file: File): Promise<string> => {
+    const buffer = await file.arrayBuffer();
+    const b64 = Buffer.from(buffer).toString('base64');
+    return `data:${file.type};base64,${b64}`;
   };
 
   try {
