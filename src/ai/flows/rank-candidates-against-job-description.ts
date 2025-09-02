@@ -8,6 +8,7 @@
  */
 
 import {ai} from '@/ai/genkit';
+import {googleAI} from '@genkit-ai/googleai';
 import {z} from 'genkit';
 
 const RankCandidatesInputSchema = z.object({
@@ -51,6 +52,7 @@ const rankCandidatesPrompt = ai.definePrompt({
   name: 'rankCandidatesPrompt',
   input: {schema: RankCandidatesInputSchema},
   output: {schema: RankCandidatesOutputSchema},
+  model: googleAI.model('gemini-2.5-flash'),
   prompt: `You are an expert HR assistant. You will rank candidates based on their resumes against a job description.
 From each resume, you MUST extract the candidate's full name and email address.
 
