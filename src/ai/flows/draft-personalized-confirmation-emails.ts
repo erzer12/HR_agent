@@ -1,4 +1,4 @@
-// This file is machine-generated - edit with caution!
+
 'use server';
 /**
  * @fileOverview This flow drafts personalized confirmation emails to candidates with interview details.
@@ -13,23 +13,50 @@ import {z} from 'genkit';
 
 const DraftPersonalizedConfirmationEmailInputSchema = z.object({
   candidateName: z.string().describe('The name of the candidate.'),
-  jobTitle: z.string().describe('The title of the job the candidate applied for.'),
+  jobTitle: z
+    .string()
+    .describe('The title of the job the candidate applied for.'),
   interviewDate: z.string().describe('The date of the interview.'),
   interviewTime: z.string().describe('The time of the interview.'),
   interviewerName: z.string().describe('The name of the interviewer.'),
-  candidateEmail: z.string().optional().describe('The email address of the candidate.'),
+  candidateEmail: z
+    .string()
+    .optional()
+    .describe('The email address of the candidate.'),
 });
-export type DraftPersonalizedConfirmationEmailInput = z.infer<typeof DraftPersonalizedConfirmationEmailInputSchema>;
+export type DraftPersonalizedConfirmationEmailInput = z.infer<
+  typeof DraftPersonalizedConfirmationEmailInputSchema
+>;
 
 const DraftPersonalizedConfirmationEmailOutputSchema = z.object({
   emailSubject: z.string().describe('The subject of the confirmation email.'),
   emailBody: z.string().describe('The body of the confirmation email.'),
 });
-export type DraftPersonalizedConfirmationEmailOutput = z.infer<typeof DraftPersonalizedConfirmationEmailOutputSchema>;
+export type DraftPersonalizedConfirmationEmailOutput = z.infer<
+  typeof DraftPersonalizedConfirmationEmailOutputSchema
+>;
 
-export async function draftPersonalizedConfirmationEmail(input: DraftPersonalizedConfirmationEmailInput): Promise<DraftPersonalizedConfirmationEmailOutput> {
+export async function draftPersonalizedConfirmationEmail(
+  input: DraftPersonalizedConfirmationEmailInput
+): Promise<DraftPersonalizedConfirmationEmailOutput> {
   return draftPersonalizedConfirmationEmailFlow(input);
 }
+
+const prompt = ai.definePrompt({
+  name: 'draftPersonalizedConfirmationEmailPrompt',
+  input: {schema: DraftPersonalizedConfirmationEmailInputSchema},
+  output: {schema: DraftPersonalizedConfirmationEmailOutputSchema},
+  prompt: `You are an HR assistant. Draft a personalized confirmation email to a candidate with interview details.
+
+  Candidate Name: {{{candidateName}}}
+  Job Title: {{{jobTitle}}}
+  Interview Date: {{{interviewDate}}}
+  Interview Time: {{{interviewTime}}}
+  Interviewer: {{{interviewerName}}}
+  
+  Generate a professional and friendly email with a clear subject line and body.
+  The body should be well-formatted with appropriate line breaks.`,
+});
 
 const draftPersonalizedConfirmationEmailFlow = ai.defineFlow(
   {
@@ -38,32 +65,7 @@ const draftPersonalizedConfirmationEmailFlow = ai.defineFlow(
     outputSchema: DraftPersonalizedConfirmationEmailOutputSchema,
   },
   async input => {
-    const {
-        candidateName,
-        jobTitle,
-        interviewDate,
-        interviewTime,
-        interviewerName,
-    } = input;
-
-    const emailSubject = `Interview Confirmation: ${jobTitle}`;
-    const emailBody = `Dear ${candidateName},
-
-Thank you for your interest in the ${jobTitle} position. We would like to invite you for an interview.
-
-Your interview is scheduled for:
-Date: ${interviewDate}
-Time: ${interviewTime}
-Interviewer: ${interviewerName}
-
-We look forward to speaking with you.
-
-Best regards,
-The Hiring Team`;
-
-    return {
-      emailSubject,
-      emailBody,
-    };
+    const {output} = await prompt(input);
+    return output!;
   }
 );
