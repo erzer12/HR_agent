@@ -6,13 +6,14 @@ import { useToast } from "@/hooks/use-toast";
 
 import type { ClientCandidate, Job } from "@/lib/types";
 import { db } from "@/lib/firebase";
-import { collection, query, onSnapshot, orderBy, doc, getDoc } from "firebase/firestore";
-import { createJobAndRankCandidates } from "@/lib/actions";
+import { collection, query, onSnapshot, orderBy } from "firebase/firestore";
+import { createJobAndRankCandidates, deleteJob, updateJob } from "@/lib/actions";
 
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,7 +24,7 @@ import { Logo } from "@/components/logo";
 import { JobListItem } from "@/components/job-list-item";
 import { formatDistanceToNow } from "date-fns";
 
-import { UploadCloud, Sparkles, Users, FileText, Crown, Mail, Loader2, Calendar, Clock, User, PlusCircle, Briefcase } from "lucide-react";
+import { UploadCloud, Sparkles, Users, FileText, Crown, Mail, Loader2, Calendar, Clock, User, PlusCircle, Briefcase, Edit } from "lucide-react";
 
 type EmailDraft = {
   candidateName: string;
@@ -46,6 +47,16 @@ export default function Home() {
   const [jobDescription, setJobDescription] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [isCreatingJob, setIsCreatingJob] = useState(false);
+  
+  // State for Edit Job Dialog
+  const [isEditJobDialogOpen, setIsEditJobDialogOpen] = useState(false);
+  const [editingJob, setEditingJob] = useState<Job | null>(null);
+  const [isUpdatingJob, setIsUpdatingJob] = useState(false);
+
+  // State for Delete Job Dialog
+  const [isDeletingJob, setIsDeletingJob] = useState(false);
+  const [jobToDelete, setJobToDelete] = useState<string | null>(null);
+
 
   // Existing state for actions on candidates
   const [topN, setTopN] = useState("3");
@@ -236,6 +247,48 @@ The Hiring Team`;
     setEmailDrafts(generatedDrafts);
     setIsEmailLoading(false);
   };
+
+  const handleEditJob = (job: Job) => {
+    setEditingJob(job);
+    setIsEditJobDialogOpen(true);
+  };
+  
+  const handleUpdateJob = async () => {
+    if (!editingJob) return;
+    setIsUpdatingJob(true);
+    try {
+      await updateJob(editingJob.id, {
+        title: editingJob.title,
+        jobDescription: editingJob.jobDescription,
+      });
+      toast({ title: "Job updated successfully!" });
+      setIsEditJobDialogOpen(false);
+      setEditingJob(null);
+    } catch (error) {
+      console.error("Error updating job:", error);
+      toast({ variant: 'destructive', title: "Failed to update job" });
+    } finally {
+      setIsUpdatingJob(false);
+    }
+  };
+
+  const handleDeleteJob = async (jobId: string) => {
+    setIsDeletingJob(true);
+    try {
+      await deleteJob(jobId);
+      toast({ title: "Job deleted successfully" });
+      if (selectedJobId === jobId) {
+        const remainingJobs = jobs.filter(j => j.id !== jobId);
+        setSelectedJobId(remainingJobs.length > 0 ? remainingJobs[0].id : null);
+      }
+      setJobToDelete(null);
+    } catch (error) {
+      console.error("Error deleting job:", error);
+      toast({ variant: "destructive", title: "Failed to delete job" });
+    } finally {
+      setIsDeletingJob(false);
+    }
+  };
   
   const selectedCount = candidates.filter(c => c.selected).length;
   const selectedJob = useMemo(() => jobs.find(j => j.id === selectedJobId), [jobs, selectedJobId]);
@@ -263,6 +316,8 @@ The Hiring Team`;
                         job={job}
                         isSelected={selectedJobId === job.id}
                         onSelect={() => setSelectedJobId(job.id)}
+                        onEdit={handleEditJob}
+                        onDelete={(jobId) => setJobToDelete(jobId)}
                     />
                 ))}
                 {!isJobsLoading && jobs.length === 0 && (
@@ -397,6 +452,60 @@ The Hiring Team`;
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Edit Job Dialog */}
+      <Dialog open={isEditJobDialogOpen} onOpenChange={setIsEditJobDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Job Posting</DialogTitle>
+            <DialogDescription>Update the title and description for this job.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-job-title">Job Title</Label>
+              <Input
+                id="edit-job-title"
+                value={editingJob?.title || ''}
+                onChange={(e) => setEditingJob(prev => prev ? { ...prev, title: e.target.value } : null)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-job-description">Job Description</Label>
+              <Textarea
+                id="edit-job-description"
+                value={editingJob?.jobDescription || ''}
+                onChange={(e) => setEditingJob(prev => prev ? { ...prev, jobDescription: e.target.value } : null)}
+                className="min-h-[200px]"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditJobDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleUpdateJob} disabled={isUpdatingJob}>
+              {isUpdatingJob ? <Loader2 className="animate-spin" /> : <Edit className="mr-2" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+       <AlertDialog open={!!jobToDelete} onOpenChange={(open) => !open && setJobToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the job posting and all associated candidates.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setJobToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleDeleteJob(jobToDelete!)} disabled={isDeletingJob}>
+              {isDeletingJob ? <Loader2 className="animate-spin" /> : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
 
       {/* Interview Details Dialog */}

@@ -1,7 +1,7 @@
 "use server";
 
 import { rankCandidates } from "@/ai/flows/rank-candidates-against-job-description";
-import { addDoc, collection, serverTimestamp, doc, updateDoc, getDoc } from "firebase/firestore";
+import { addDoc, collection, serverTimestamp, doc, updateDoc, getDoc, writeBatch, getDocs } from "firebase/firestore";
 import { db } from "./firebase";
 import type { ClientCandidate, Job } from "./types";
 
@@ -71,4 +71,30 @@ export async function createJobAndRankCandidates(jobDescription: string, resumeF
     }
     throw new Error("An unknown error occurred during ranking.");
   }
+}
+
+export async function updateJob(jobId: string, data: { title: string, jobDescription: string }) {
+    if (!jobId) throw new Error("Job ID is required.");
+    const jobRef = doc(db, "jobs", jobId);
+    await updateDoc(jobRef, data);
+}
+
+export async function deleteJob(jobId: string) {
+    if (!jobId) throw new Error("Job ID is required.");
+    
+    const batch = writeBatch(db);
+    
+    // 1. Delete all candidates in the subcollection
+    const candidatesRef = collection(db, "jobs", jobId, "candidates");
+    const candidatesSnapshot = await getDocs(candidatesRef);
+    candidatesSnapshot.forEach(doc => {
+        batch.delete(doc.ref);
+    });
+
+    // 2. Delete the job document itself
+    const jobRef = doc(db, "jobs", jobId);
+    batch.delete(jobRef);
+    
+    // 3. Commit the batch
+    await batch.commit();
 }
