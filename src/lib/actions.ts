@@ -118,9 +118,16 @@ export async function addResumesToJob(jobId: string, resumeFiles: File[]) {
     return { jobId: jobId };
 
   } catch (error) {
-    // If ranking fails, update job status to 'failed'
-    await updateDoc(jobDocRef, { status: 'failed' });
     console.error("Error in addResumesToJob:", error);
+    // If ranking fails due to a transient error, revert status. Otherwise, mark as failed.
+    const errorMessage = error instanceof Error ? error.message : '';
+    if (errorMessage.includes('503 Service Unavailable')) {
+        await updateDoc(jobDocRef, { status: 'completed' }); // Revert to completed
+        throw new Error('The model is currently overloaded. Please try again in a few moments.');
+    } else {
+        await updateDoc(jobDocRef, { status: 'failed' });
+    }
+
     if (error instanceof Error) {
         throw new Error(`Adding resumes failed: ${error.message}`);
     }
