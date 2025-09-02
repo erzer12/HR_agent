@@ -39,7 +39,7 @@ import { Plus, Send, Loader2, FileText, Calendar as CalendarIcon, Briefcase, Upl
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { format, add } from "date-fns";
+import { format, add, isSameDay } from "date-fns";
 
 
 type EmailDraft = {
@@ -79,6 +79,7 @@ export default function Home() {
   const [isAddingResumes, setIsAddingResumes] = useState(false);
   const [isSendingEmails, setIsSendingEmails] = useState(false);
   const [isCalendarConnected, setIsCalendarConnected] = useState(false);
+  const [scheduledDates, setScheduledDates] = useState<Date[]>([]);
 
 
   // Fetch jobs from Firestore
@@ -143,14 +144,15 @@ export default function Home() {
 
   // Check for calendar connection status (e.g., from a cookie or local storage)
   useEffect(() => {
-    // In a real app, you would check for a stored OAuth token.
-    // For this example, we'll check for a query parameter.
     const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('calendar') === 'connected') {
+    const calendarConnected = document.cookie.includes('google_calendar_connected=true');
+
+    if (calendarConnected || urlParams.get('calendar') === 'connected') {
       setIsCalendarConnected(true);
-      toast({ title: "Google Calendar Connected!", description: "You can now schedule interviews." });
-      // Clean up the URL
-      window.history.replaceState({}, document.title, window.location.pathname);
+      if (urlParams.get('calendar') === 'connected') {
+        toast({ title: "Google Calendar Connected!", description: "You can now schedule interviews." });
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
     }
   }, [toast]);
 
@@ -372,8 +374,11 @@ export default function Home() {
                 }))
         );
         toast({ title: 'Calendar events scheduled!', description: "This is a placeholder. See server logs for details." });
-        
 
+        if (!scheduledDates.some(d => isSameDay(d, interviewDate))) {
+            setScheduledDates(prev => [...prev, interviewDate]);
+        }
+        
         setIsEmailDialogOpen(false);
     } catch (error) {
         console.error("Error sending emails or scheduling:", error);
@@ -550,15 +555,23 @@ export default function Home() {
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><CalendarIcon className="w-5 h-5 text-muted-foreground" /> Google Calendar</CardTitle>
-                <CardDescription>Connect your Google Calendar to view and manage interview schedules.</CardDescription>
+                <CardDescription>
+                    {isCalendarConnected 
+                      ? "Your scheduled interviews are highlighted below." 
+                      : "Connect your Google Calendar to view and manage interview schedules."
+                    }
+                </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex justify-center">
               {isCalendarConnected ? (
-                <div>
-                  <p className="text-green-600 font-medium">✓ Calendar Connected</p>
-                  <p className="text-muted-foreground mt-2 text-sm">Your scheduled interviews will appear here. This is a placeholder for the calendar view.</p>
-                  {/* A developer would replace this with a component that fetches and displays calendar events */}
-                </div>
+                 <Calendar
+                    mode="multiple"
+                    selected={scheduledDates}
+                    className="p-0"
+                    classNames={{
+                      day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground rounded-md",
+                    }}
+                  />
               ) : (
                 <Button onClick={handleConnectToCalendar}>
                     <LinkIcon className="mr-2" />
@@ -685,3 +698,5 @@ export default function Home() {
     </div>
   );
 }
+
+    
