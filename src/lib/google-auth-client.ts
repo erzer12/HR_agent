@@ -9,7 +9,7 @@ import { google } from 'googleapis';
 // first step in any interaction with Google's OAuth 2.0 system.
 
 export const oAuth2Client = new google.auth.OAuth2(
-  process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
   // This is the "Redirect URI" you configured in the Google Cloud Console.
   // It must be an absolute URL and match the value in your .env file.

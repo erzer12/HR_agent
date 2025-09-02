@@ -253,7 +253,7 @@ export async function getGoogleAuthUrl(): Promise<string> {
  * @param details - The details of the event to create.
  */
 export async function createCalendarEvent(details: { title: string, startTime: string, endTime: string, attendeeEmail: string }) {
-   if (!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID) {
+   if (!process.env.GOOGLE_CLIENT_ID) {
     console.warn("GOOGLE_CLIENT_ID not found. Skipping calendar event creation.");
     return;
   }
@@ -273,7 +273,7 @@ export async function createCalendarEvent(details: { title: string, startTime: s
   // Example of what the call would look like with the 'googleapis' library
   /*
   const oauth2Client = new google.auth.OAuth2(
-    process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET, // This MUST be stored securely on the server
     // The redirect URI used in the OAuth flow
     // e.g., "http://localhost:3000/api/auth/google/callback" 
