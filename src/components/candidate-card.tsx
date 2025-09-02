@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ClientCandidate } from "@/lib/types";
@@ -5,15 +6,28 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { User, Mail } from "lucide-react";
+import { User, Mail, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "./ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface CandidateCardProps {
   candidate: ClientCandidate;
   onSelect: (id: string, selected: boolean) => void;
+  onDelete: (id: string) => void;
 }
 
-export function CandidateCard({ candidate, onSelect }: CandidateCardProps) {
+export function CandidateCard({ candidate, onSelect, onDelete }: CandidateCardProps) {
   const suitabilityPercentage = Math.round(candidate.suitabilityScore * 100);
 
   const getBadgeVariant = () => {
@@ -70,9 +84,31 @@ export function CandidateCard({ candidate, onSelect }: CandidateCardProps) {
           </div>
         </div>
       </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground pl-10">{candidate.summary}</p>
+      <CardContent className="relative">
+        <p className="text-sm text-muted-foreground pl-10 pr-10">{candidate.summary}</p>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="ghost" size="icon" className="absolute bottom-2 right-2 h-8 w-8 text-muted-foreground hover:text-destructive">
+                <Trash2 className="w-4 h-4"/>
+                <span className="sr-only">Delete candidate</span>
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently remove the candidate <span className="font-semibold">{candidate.candidateName}</span> from this job. This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => onDelete(candidate.id)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );
 }
+
+    

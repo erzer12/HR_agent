@@ -2,7 +2,7 @@
 "use server";
 
 import { rankCandidates } from "@/ai/flows/rank-candidates-against-job-description";
-import { addDoc, collection, serverTimestamp, doc, updateDoc, writeBatch, getDocs, getDoc } from "firebase/firestore";
+import { addDoc, collection, serverTimestamp, doc, updateDoc, writeBatch, getDocs, getDoc, deleteDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import type { ClientCandidate, Job } from "./types";
 
@@ -157,3 +157,13 @@ export async function deleteJob(jobId: string) {
     
     await batch.commit();
 }
+
+export async function deleteCandidate(jobId: string, candidateId: string) {
+  if (!jobId || !candidateId) {
+    throw new Error("Job ID and Candidate ID are required.");
+  }
+  const candidateRef = doc(db, "jobs", jobId, "candidates", candidateId);
+  await deleteDoc(candidateRef);
+}
+
+    

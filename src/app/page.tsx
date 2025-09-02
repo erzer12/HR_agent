@@ -8,7 +8,7 @@ import { db } from "@/lib/firebase";
 
 import type { ClientCandidate, Job } from "@/lib/types";
 import { draftPersonalizedConfirmationEmail } from "@/ai/flows/draft-personalized-confirmation-emails";
-import { createJobAndRankCandidates, updateJob, deleteJob, addResumesToJob } from "@/lib/actions";
+import { createJobAndRankCandidates, updateJob, deleteJob, addResumesToJob, deleteCandidate } from "@/lib/actions";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -85,6 +85,12 @@ export default function Home() {
       if (!selectedJob && jobsData.length > 0) {
         const currentJob = jobsData.find(j => j.id === selectedJob?.id) || jobsData[0];
         setSelectedJob(currentJob);
+      } else if (selectedJob) {
+        // If a job is selected, make sure it's kept up to date (e.g. status change)
+        const updatedSelectedJob = jobsData.find(j => j.id === selectedJob.id);
+        if (updatedSelectedJob) {
+          setSelectedJob(updatedSelectedJob);
+        }
       }
     }, (error) => {
       console.error("Error fetching jobs:", error);
@@ -95,7 +101,7 @@ export default function Home() {
       });
     });
     return () => unsubscribe();
-  }, []);
+  }, [selectedJob?.id]);
 
   // Fetch candidates for selected job
   useEffect(() => {
@@ -197,6 +203,16 @@ export default function Home() {
       }
     } catch (error) {
        toast({ variant: 'destructive', title: 'Failed to delete job', description: error instanceof Error ? error.message : 'Unknown error'});
+    }
+  };
+
+  const handleDeleteCandidate = async (candidateId: string) => {
+    if (!selectedJob) return;
+    try {
+      await deleteCandidate(selectedJob.id, candidateId);
+      toast({ title: 'Candidate removed' });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Failed to remove candidate', description: error instanceof Error ? error.message : 'Unknown error' });
     }
   };
   
@@ -336,7 +352,12 @@ export default function Home() {
                     <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="animate-spin" /> Analyzing resumes...</div>
                 )}
                 {selectedJob.status === 'completed' && candidates.length > 0 && candidates.map(candidate => (
-                    <CandidateCard key={candidate.id} candidate={candidate} onSelect={handleSelectCandidate} />
+                    <CandidateCard 
+                      key={candidate.id} 
+                      candidate={candidate} 
+                      onSelect={handleSelectCandidate} 
+                      onDelete={() => handleDeleteCandidate(candidate.id)}
+                    />
                 ))}
                  {selectedJob.status === 'completed' && candidates.length === 0 && (
                     <div className="text-center py-8 text-muted-foreground">No candidates have been analyzed for this job yet.</div>
@@ -451,3 +472,5 @@ export default function Home() {
     </div>
   );
 }
+
+    
