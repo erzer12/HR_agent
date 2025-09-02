@@ -429,9 +429,13 @@ export default function Home() {
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><CalendarIcon className="w-5 h-5 text-muted-foreground" /> Calendar</CardTitle>
+                <CardDescription>View your upcoming interview schedule.</CardDescription>
             </CardHeader>
             <CardContent>
-                <p className="text-muted-foreground">Interview scheduling and calendar integration will be available here.</p>
+                <Calendar
+                    mode="multiple"
+                    className="p-0"
+                />
             </CardContent>
         </Card>
        </div>
@@ -550,3 +554,5 @@ export default function Home() {
     </div>
   );
 }
+
+    
