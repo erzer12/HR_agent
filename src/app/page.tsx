@@ -126,9 +126,12 @@ export default function Home() {
   
   const handleGenerateEmailDrafts = async () => {
     setIsEmailLoading(true);
+    setEmailDrafts([]);
+    setIsInterviewDialogOpen(false);
+    setIsEmailPreviewOpen(true);
     const selectedCandidates = candidates.filter(c => c.selected);
     try {
-      const drafts: EmailDraft[] = await Promise.all(selectedCandidates.map(async (candidate) => {
+      for (const candidate of selectedCandidates) {
         const candidateName = candidate.fileName.split('.').slice(0, -1).join('.').replace(/[-_]/g, ' ');
         const result = await draftPersonalizedConfirmationEmail({
           candidateName,
@@ -138,11 +141,8 @@ export default function Home() {
           interviewTime: interviewDetails.time,
           interviewerName: interviewDetails.interviewer,
         });
-        return { candidateName, ...result };
-      }));
-      setEmailDrafts(drafts);
-      setIsInterviewDialogOpen(false);
-      setIsEmailPreviewOpen(true);
+        setEmailDrafts(prevDrafts => [...prevDrafts, { candidateName, ...result }]);
+      }
     } catch (error) {
       console.error("Error drafting emails:", error);
       toast({
@@ -315,8 +315,12 @@ export default function Home() {
       <EmailPreviewDialog 
         isOpen={isEmailPreviewOpen} 
         onOpenChange={setIsEmailPreviewOpen} 
-        drafts={emailDrafts} 
+        drafts={emailDrafts}
+        isLoading={isEmailLoading}
+        selectedCount={candidates.filter(c => c.selected).length}
       />
     </>
   );
 }
+
+    
