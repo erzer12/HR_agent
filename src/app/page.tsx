@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 import { Sidebar, SidebarContent, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuItem, SidebarTrigger } from "@/components/ui/sidebar";
-import { Plus, Send, Loader2, FileText, Calendar, Briefcase, Upload } from "lucide-react";
+import { Plus, Send, Loader2, FileText, Calendar, Briefcase, Upload, Edit } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -241,7 +241,12 @@ export default function Home() {
     setFiles([]);
     setIsCreatingOrEditingJob(false);
     if (jobs && jobs.length > 0) {
-        setSelectedJob(jobs[0]);
+        const currentSelectedJob = selectedJob ? jobs.find(j => j.id === selectedJob.id) : null;
+        if(currentSelectedJob) {
+          setSelectedJob(currentSelectedJob);
+        } else {
+          setSelectedJob(jobs[0]);
+        }
     } else {
         setSelectedJob(null);
     }
@@ -343,9 +348,15 @@ export default function Home() {
     return (
        <div className="space-y-6">
         <Card>
-            <CardHeader>
-                <CardTitle>Candidate Review</CardTitle>
-                <CardDescription>Found {candidates.length} candidates for: <span className="font-semibold text-primary">{selectedJob.title}</span></CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+                <div className="space-y-1">
+                    <CardTitle>Candidate Review</CardTitle>
+                    <CardDescription>Found {candidates.length} candidates for: <span className="font-semibold text-primary">{selectedJob.title}</span></CardDescription>
+                </div>
+                 <Button variant="outline" onClick={() => startEditingJob(selectedJob)}>
+                    <Edit className="mr-2"/>
+                    Edit Job
+                </Button>
             </CardHeader>
             <CardContent className="space-y-4">
                 {selectedJob.status === 'processing' && (

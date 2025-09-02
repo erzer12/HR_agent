@@ -85,7 +85,7 @@ export function CandidateCard({ candidate, onSelect, onDelete }: CandidateCardPr
         </div>
       </CardHeader>
       <CardContent className="relative">
-        <p className="text-sm text-muted-foreground pl-10 pr-10">{candidate.summary}</p>
+        <CardDescription className="text-sm text-muted-foreground pl-10 pr-10">{candidate.summary}</CardDescription>
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button variant="ghost" size="icon" className="absolute bottom-2 right-2 h-8 w-8 text-muted-foreground hover:text-destructive">
