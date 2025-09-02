@@ -1,3 +1,4 @@
+
 "use server";
 
 import { rankCandidates } from "@/ai/flows/rank-candidates-against-job-description";
@@ -33,16 +34,20 @@ export async function createJobAndRankCandidates(jobDescription: string, resumeF
 
     // 3. Save ranked candidates to the 'candidates' sub-collection
     const candidatesCollectionRef = collection(db, "jobs", jobDocRef.id, "candidates");
+    const batch = writeBatch(db);
+
     for (const ranking of result.rankings) {
       const candidateData: Omit<ClientCandidate, 'id' | 'selected' | 'fileName'> = {
         candidateName: ranking.candidateName,
-        candidateEmail: ranking.candidateEmail,
+        candidateEmail: ranking.candidateEmail ?? null, // Ensure email is not undefined
         suitabilityScore: ranking.suitabilityScore,
         summary: ranking.summary,
         candidateIndex: ranking.candidateIndex,
       };
-      await addDoc(candidatesCollectionRef, candidateData);
+      const newCandidateRef = doc(candidatesCollectionRef);
+      batch.set(newCandidateRef, candidateData);
     }
+    await batch.commit();
     
     // 4. Update job status
     await updateDoc(jobDocRef, { status: 'completed' });
