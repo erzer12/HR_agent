@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -6,11 +7,12 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { ClipboardCopy, Loader2 } from "lucide-react";
+import { ClipboardCopy, Loader2, Send } from "lucide-react";
 import { Skeleton } from "./ui/skeleton";
 
 type EmailDraft = {
@@ -24,10 +26,12 @@ interface EmailPreviewDialogProps {
   onOpenChange: (open: boolean) => void;
   drafts: EmailDraft[];
   isLoading: boolean;
+  isSending: boolean;
   selectedCount: number;
+  onSend: () => void;
 }
 
-export function EmailPreviewDialog({ isOpen, onOpenChange, drafts, isLoading, selectedCount }: EmailPreviewDialogProps) {
+export function EmailPreviewDialog({ isOpen, onOpenChange, drafts, isLoading, isSending, selectedCount, onSend }: EmailPreviewDialogProps) {
   const { toast } = useToast();
 
   const copyToClipboard = (text: string) => {
@@ -51,7 +55,7 @@ export function EmailPreviewDialog({ isOpen, onOpenChange, drafts, isLoading, se
           <DialogDescription>
             {showLoadingState 
               ? `Generating ${drafts.length} of ${selectedCount} emails...`
-              : "Here are the generated email drafts. Review and copy them as needed."
+              : "Review the drafted emails below. You can send all emails at once."
             }
           </DialogDescription>
         </DialogHeader>
@@ -105,7 +109,18 @@ export function EmailPreviewDialog({ isOpen, onOpenChange, drafts, isLoading, se
           </Tabs>
           </div>
         )}
-
+        
+        <DialogFooter className="pt-4">
+            <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+             <Button
+                onClick={onSend}
+                disabled={isLoading || isSending || drafts.length < selectedCount}
+                className="bg-accent hover:bg-accent/90"
+             >
+                {isSending ? <Loader2 className="animate-spin" /> : <Send />}
+                Send Emails & Schedule
+            </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

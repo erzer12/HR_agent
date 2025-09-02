@@ -8,7 +8,7 @@ import { db } from "@/lib/firebase";
 
 import type { ClientCandidate, Job } from "@/lib/types";
 import { draftPersonalizedConfirmationEmail } from "@/ai/flows/draft-personalized-confirmation-emails";
-import { createJobAndRankCandidates, updateJob, deleteJob, addResumesToJob, deleteCandidate } from "@/lib/actions";
+import { createJobAndRankCandidates, updateJob, deleteJob, addResumesToJob, deleteCandidate, sendInterviewEmail } from "@/lib/actions";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -42,6 +42,7 @@ import { format } from "date-fns";
 
 type EmailDraft = {
   candidateName: string;
+  candidateEmail: string | null;
   subject: string;
   body: string;
 };
@@ -74,6 +75,7 @@ export default function Home() {
   const [jobTitleForNewJob, setJobTitleForNewJob] = useState("");
   const [newResumeFiles, setNewResumeFiles] = useState<File[]>([]);
   const [isAddingResumes, setIsAddingResumes] = useState(false);
+  const [isSendingEmails, setIsSendingEmails] = useState(false);
 
 
   // Fetch jobs from Firestore
@@ -287,6 +289,7 @@ export default function Home() {
         });
         drafts.push({
           candidateName: candidate.candidateName,
+          candidateEmail: candidate.candidateEmail,
           subject: result.emailSubject,
           body: result.emailBody,
         });
@@ -303,6 +306,36 @@ export default function Home() {
     } finally {
       setIsGeneratingEmails(false);
     }
+  };
+
+  const handleSendEmails = async () => {
+    if (emailDrafts.length === 0) return;
+    setIsSendingEmails(true);
+    try {
+      await Promise.all(
+        emailDrafts.map(draft => {
+          if (draft.candidateEmail) {
+            return sendInterviewEmail(draft.candidateEmail, draft.subject, draft.body);
+          }
+          return Promise.resolve();
+        })
+      );
+      toast({ title: 'Emails sent successfully!' });
+       // Here you would also trigger the Google Calendar event creation
+       // For now, we'll just log it.
+      console.log('TODO: Trigger Google Calendar event creation for date:', interviewDate, 'and time:', interviewTime);
+      setIsEmailDialogOpen(false);
+    } catch (error) {
+       console.error("Error sending emails:", error);
+       toast({
+        variant: "destructive",
+        title: "Failed to Send Emails",
+        description: error instanceof Error ? error.message : "Could not send emails. Please check the server logs.",
+      });
+    } finally {
+      setIsSendingEmails(false);
+    }
+
   };
   
   const selectedCount = candidates.filter(c => c.selected).length;
@@ -549,7 +582,9 @@ export default function Home() {
             onOpenChange={setIsEmailDialogOpen}
             drafts={emailDrafts}
             isLoading={isGeneratingEmails}
+            isSending={isSendingEmails}
             selectedCount={selectedCount}
+            onSend={handleSendEmails}
         />
     </div>
   );
