@@ -17,7 +17,7 @@ const DraftPersonalizedConfirmationEmailInputSchema = z.object({
   interviewDate: z.string().describe('The date of the interview.'),
   interviewTime: z.string().describe('The time of the interview.'),
   interviewerName: z.string().describe('The name of the interviewer.'),
-  candidateEmail: z.string().email().describe('The email address of the candidate.'),
+  candidateEmail: z.string().optional().describe('The email address of the candidate.'),
 });
 export type DraftPersonalizedConfirmationEmailInput = z.infer<typeof DraftPersonalizedConfirmationEmailInputSchema>;
 

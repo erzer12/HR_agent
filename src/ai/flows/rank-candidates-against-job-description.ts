@@ -24,6 +24,8 @@ const CandidateRankingSchema = z.object({
   candidateIndex: z
     .number()
     .describe('The index of the candidate in the input resumes array.'),
+  candidateName: z.string().describe("The full name of the candidate, extracted from the resume."),
+  candidateEmail: z.string().optional().describe("The email address of the candidate, extracted from the resume."),
   suitabilityScore: z
     .number()
     .describe(
@@ -50,6 +52,7 @@ const rankCandidatesPrompt = ai.definePrompt({
   input: {schema: RankCandidatesInputSchema},
   output: {schema: RankCandidatesOutputSchema},
   prompt: `You are an expert HR assistant. You will rank candidates based on their resumes against a job description.
+From each resume, you MUST extract the candidate's full name and email address.
 
 Job Description: {{{jobDescription}}}
 
@@ -58,7 +61,11 @@ Resumes:
 Candidate {{@index}}: {{media url=this}}
 {{/each}}
 
-Rank the candidates based on their suitability for the role, providing a suitability score between 0 and 1, and a brief summary of their qualifications and experience.
+Rank the candidates based on their suitability for the role. For each candidate, provide:
+1. Their full name.
+2. Their email address. If no email is found, omit the field.
+3. A suitability score between 0 and 1.
+4. A brief summary of their qualifications and experience.
 
 {{output.schema.description}}
 `,

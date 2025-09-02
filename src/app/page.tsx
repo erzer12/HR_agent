@@ -133,7 +133,7 @@ export default function Home() {
     
     const generatedDrafts: EmailDraft[] = [];
     for (const candidate of selectedCandidates) {
-      const candidateName = candidate.fileName.split('.').slice(0, -1).join('.').replace(/[-_]/g, ' ');
+      const candidateName = candidate.candidateName;
       const emailSubject = `Interview Confirmation: ${jobTitle}`;
       const emailBody = `Dear ${candidateName},
 
