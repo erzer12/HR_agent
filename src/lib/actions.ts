@@ -1,4 +1,3 @@
-
 // In src/lib/actions.ts
 
 "use server";
@@ -20,6 +19,8 @@ import type { ClientCandidate, Job } from "./types";
 
 import { Resend } from "resend";
 import { google } from "googleapis";
+import { oAuth2Client } from "./google-auth-client";
+
 
 // Initialize Resend - Make sure RESEND_API_KEY is in your .env file
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -208,8 +209,33 @@ export async function sendInterviewEmail(to: string, subject: string, body: stri
 }
 
 // ---------------------------------
-// Google Calendar Placeholder
+// Google Calendar
 // ---------------------------------
+
+
+/**
+ * ######################################################################
+ * # STEP 2: Generate the Authentication URL                            #
+ * ######################################################################
+ * This function generates the unique URL that the user will be sent to
+ * in order to log in with Google and grant your app permissions.
+ */
+export async function getGoogleAuthUrl(): Promise<string> {
+  const scopes = [
+    // We are requesting the minimal scope needed to read/write calendar events.
+    'https://www.googleapis.com/auth/calendar.events',
+    // We also ask for user profile info to personalize the experience.
+    'https://www.googleapis.com/auth/userinfo.profile',
+    'https://www.googleapis.com/auth/userinfo.email',
+  ];
+
+  return oAuth2Client.generateAuthUrl({
+    access_type: 'offline', // 'offline' is crucial for getting a refresh token
+    prompt: 'consent', // Forces the consent screen to appear, ensuring you get a refresh token
+    scope: scopes,
+  });
+}
+
 
 /**
  * Placeholder function for creating a Google Calendar event.

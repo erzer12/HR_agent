@@ -8,7 +8,7 @@ import { db } from "@/lib/firebase";
 
 import type { ClientCandidate, Job } from "@/lib/types";
 import { draftPersonalizedConfirmationEmail } from "@/ai/flows/draft-personalized-confirmation-emails";
-import { createJobAndRankCandidates, updateJob, deleteJob, addResumesToJob, deleteCandidate, sendInterviewEmail, createCalendarEvent, deleteAllCandidates } from "@/lib/actions";
+import { createJobAndRankCandidates, updateJob, deleteJob, addResumesToJob, deleteCandidate, sendInterviewEmail, createCalendarEvent, deleteAllCandidates, getGoogleAuthUrl } from "@/lib/actions";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -40,7 +40,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { format, add } from "date-fns";
-import { getGoogleAuthUrl } from "@/lib/google-auth";
+
 
 type EmailDraft = {
   candidateName: string;
@@ -387,6 +387,20 @@ export default function Home() {
     }
 };
 
+  const handleConnectToCalendar = async () => {
+    try {
+      const url = await getGoogleAuthUrl();
+      window.location.href = url;
+    } catch (error) {
+      console.error("Error getting auth URL", error);
+      toast({
+        variant: "destructive",
+        title: "Could not connect to Google",
+        description: "Failed to generate the authentication URL. Please check the server logs."
+      })
+    }
+  }
+
   
   const selectedCount = candidates.filter(c => c.selected).length;
 
@@ -546,7 +560,7 @@ export default function Home() {
                   {/* A developer would replace this with a component that fetches and displays calendar events */}
                 </div>
               ) : (
-                <Button onClick={() => window.location.href = getGoogleAuthUrl()}>
+                <Button onClick={handleConnectToCalendar}>
                     <LinkIcon className="mr-2" />
                     Connect to Google Calendar
                 </Button>
