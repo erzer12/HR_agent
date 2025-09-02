@@ -1,10 +1,14 @@
+
 // In src/app/api/auth/google/callback/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
-import { oAuth2Client } from '@/lib/google-auth';
+import { oAuth2Client } from '@/lib/google-auth-client';
 import { cookies } from 'next/headers';
 
 export async function GET(req: NextRequest) {
+  // Log the full callback URL to help diagnose redirect_uri_mismatch errors
+  console.log('Received Google OAuth callback at URL:', req.url);
+
   const searchParams = req.nextUrl.searchParams;
   const code = searchParams.get('code');
 
