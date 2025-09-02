@@ -24,17 +24,17 @@ const CandidateRankingSchema = z.object({
   candidateIndex: z
     .number()
     .describe('The index of the candidate in the input resumes array.'),
-  candidateName: z.string().describe("The full name of the candidate, extracted from the resume."),
+  candidateName: z.string().describe("The full name of the candidate, extracted from the resume. If the document is not a resume, return 'N/A'."),
   candidateEmail: z.string().optional().describe("The email address of the candidate, extracted from the resume."),
   suitabilityScore: z
     .number()
     .describe(
-      'A score between 0 and 1 representing the candidate’s suitability for the role, with 1 being the most suitable.'
+      'A score between 0 and 1 representing the candidate’s suitability for the role, with 1 being the most suitable. If the document is not a resume, the score must be 0.'
     ),
   summary: z
     .string()
     .describe(
-      'A brief summary of the candidate’s qualifications and experience, highlighting their suitability for the role.'
+      'A brief summary of the candidate’s qualifications and experience, highlighting their suitability for the role. If the document is not a resume, explain why it is not suitable.'
     ),
 });
 
@@ -53,6 +53,12 @@ const rankCandidatesPrompt = ai.definePrompt({
   output: {schema: RankCandidatesOutputSchema},
   prompt: `You are an expert HR assistant. You will rank candidates based on their resumes against a job description.
 From each resume, you MUST extract the candidate's full name and email address.
+
+If a provided document is not a resume (e.g., it is a code file, an invoice, or other irrelevant document), you must still process it. In such cases:
+1.  Set the candidate's name to 'N/A'.
+2.  Set the suitability score to 0.
+3.  Provide a summary explaining that the document is not a valid resume.
+4.  Omit the email address field.
 
 Job Description: {{{jobDescription}}}
 
