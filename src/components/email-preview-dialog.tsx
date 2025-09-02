@@ -41,7 +41,7 @@ export function EmailPreviewDialog({ isOpen, onOpenChange, drafts, isLoading, se
   
   if (!isOpen) return null;
 
-  const showLoadingState = isLoading || drafts.length < selectedCount;
+  const showLoadingState = isLoading || (drafts.length > 0 && drafts.length < selectedCount);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -56,7 +56,7 @@ export function EmailPreviewDialog({ isOpen, onOpenChange, drafts, isLoading, se
           </DialogDescription>
         </DialogHeader>
 
-        {drafts.length === 0 && showLoadingState && (
+        {drafts.length === 0 && isLoading && (
           <div className="space-y-4 p-4 border rounded-lg">
              <Skeleton className="h-6 w-1/3" />
              <Skeleton className="h-4 w-full" />
@@ -110,5 +110,3 @@ export function EmailPreviewDialog({ isOpen, onOpenChange, drafts, isLoading, se
     </Dialog>
   );
 }
-
-    

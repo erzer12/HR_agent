@@ -1,22 +1,28 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import type { ChangeEvent } from "react";
+import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
-import type { ClientCandidate, Job } from "@/lib/types";
-import { createJobAndRankCandidates } from "@/lib/actions";
+import type { ClientCandidate } from "@/lib/types";
+import { rankCandidates as rankCandidatesFlow } from "@/ai/flows/rank-candidates-against-job-description";
+import { draftPersonalizedConfirmationEmail } from "@/ai/flows/draft-personalized-confirmation-emails";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { CandidateCard } from "@/components/candidate-card";
 import { Logo } from "@/components/logo";
-
-import { UploadCloud, Sparkles, Users, FileText, ArrowRight, ArrowLeft, Loader2, Clipboard, FileUp } from "lucide-react";
 import { JobCreationForm } from "@/components/job-creation-form";
+import { EmailPreviewDialog } from "@/components/email-preview-dialog";
+
+import { Sparkles, FileText, ArrowLeft, Loader2, FileUp, Send } from "lucide-react";
+
+type EmailDraft = {
+  candidateName: string;
+  subject: string;
+  body: string;
+};
 
 export default function Home() {
   const { toast } = useToast();
@@ -29,6 +35,10 @@ export default function Home() {
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [jobDetails, setJobDetails] = useState<{title: string, description: string} | null>(null);
+
+  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const [isGeneratingEmails, setIsGeneratingEmails] = useState(false);
+  const [emailDrafts, setEmailDrafts] = useState<EmailDraft[]>([]);
 
 
   const handleFilesSelected = (selectedFiles: File[]) => {
@@ -48,12 +58,6 @@ export default function Home() {
 
     setIsProcessing(true);
     try {
-      // This is a simplified flow for MVP. It doesn't use Firestore persistence.
-      // The `createJobAndRankCandidates` function would need to be adapted
-      // or a new client-side only function created if we remove persistence.
-      // For now, we simulate the processing and display results.
-
-      // A simple utility to read files on the client.
       const fileToDataURL = (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -65,27 +69,23 @@ export default function Home() {
       
       const resumeDataURLs = await Promise.all(files.map(fileToDataURL));
 
-      // This part would be replaced by a call to a Genkit flow
-      // that does not require Firestore persistence.
-      // We will mock the response for now.
-      
-      const mockRankings: ClientCandidate[] = resumeDataURLs.map((url, index) => ({
-        id: `candidate-${index}`,
-        candidateName: files[index].name.replace(/\.[^/.]+$/, "").replace(/_/g, ' '),
-        candidateEmail: `candidate${index}@example.com`,
-        suitabilityScore: Math.random(),
-        summary: "This is a mock summary highlighting key skills and experience relevant to the job description.",
+      const result = await rankCandidatesFlow({ jobDescription: jobDetails.description, resumes: resumeDataURLs });
+
+      const rankedCandidates: ClientCandidate[] = result.rankings.map(ranking => ({
+        id: `candidate-${ranking.candidateIndex}`,
+        ...ranking,
+        candidateEmail: ranking.candidateEmail ?? null,
         selected: false,
-        candidateIndex: index,
       })).sort((a, b) => b.suitabilityScore - a.suitabilityScore);
 
-      setCandidates(mockRankings);
+
+      setCandidates(rankedCandidates);
       
       toast({
         title: "Analysis Complete!",
         description: "Candidates have been ranked below.",
       });
-      setStep(4); // Move to results panel
+      setStep(4);
     } catch (error) {
       console.error("Error processing resumes:", error);
       toast({
@@ -101,6 +101,45 @@ export default function Home() {
   const handleSelectCandidate = (id: string, selected: boolean) => {
     setCandidates(prev => prev.map(c => c.id === id ? { ...c, selected } : c));
   };
+
+  const handleGenerateEmails = async () => {
+    const selectedCandidates = candidates.filter(c => c.selected);
+    if (selectedCandidates.length === 0 || !jobDetails) return;
+
+    setIsEmailDialogOpen(true);
+    setIsGeneratingEmails(true);
+    setEmailDrafts([]);
+
+    try {
+      const drafts: EmailDraft[] = [];
+      for (const candidate of selectedCandidates) {
+        const result = await draftPersonalizedConfirmationEmail({
+          candidateName: candidate.candidateName,
+          jobTitle: jobDetails.title,
+          // These are placeholder details for the MVP
+          interviewDate: "to be confirmed",
+          interviewTime: "to be confirmed",
+          interviewerName: "the Hiring Manager",
+          candidateEmail: candidate.candidateEmail || undefined,
+        });
+        drafts.push({
+          candidateName: candidate.candidateName,
+          subject: result.emailSubject,
+          body: result.emailBody,
+        });
+        setEmailDrafts([...drafts]); // Update state incrementally
+      }
+    } catch (error) {
+      console.error("Error generating emails:", error);
+      toast({
+        variant: "destructive",
+        title: "Email Generation Failed",
+        description: "Could not draft emails for the selected candidates.",
+      });
+    } finally {
+      setIsGeneratingEmails(false);
+    }
+  };
   
   const startOver = () => {
     setStep(1);
@@ -110,6 +149,9 @@ export default function Home() {
     setCandidates([]);
     setIsProcessing(false);
     setJobDetails(null);
+    setEmailDrafts([]);
+    setIsEmailDialogOpen(false);
+    setIsGeneratingEmails(false);
   }
 
   const selectedCount = candidates.filter(c => c.selected).length;
@@ -193,8 +235,9 @@ export default function Home() {
                             </CardHeader>
                              <CardContent>
                                 <p>Selected {selectedCount} candidate(s). Proceed to the next step to schedule interviews.</p>
-                                <Button className="mt-4 bg-accent hover:bg-accent/90" disabled={selectedCount === 0}>
-                                    Select Candidates & Schedule
+                                <Button className="mt-4 bg-accent hover:bg-accent/90" disabled={selectedCount === 0} onClick={handleGenerateEmails}>
+                                    <Send className="mr-2"/>
+                                    Draft Emails for Selected Candidates
                                 </Button>
                              </CardContent>
                          </Card>
@@ -217,6 +260,14 @@ export default function Home() {
         <main className="flex-1 flex flex-col items-center justify-center p-4 md:p-8">
             {renderStep()}
         </main>
+        
+        <EmailPreviewDialog
+            isOpen={isEmailDialogOpen}
+            onOpenChange={setIsEmailDialogOpen}
+            drafts={emailDrafts}
+            isLoading={isGeneratingEmails}
+            selectedCount={selectedCount}
+        />
     </div>
   );
 }
