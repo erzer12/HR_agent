@@ -1,3 +1,4 @@
+
 "use client";
 
 import { cn } from "@/lib/utils";
@@ -33,7 +34,7 @@ interface JobListItemProps {
 
 export function JobListItem({ job, isSelected, onSelect, onEdit, onDelete }: JobListItemProps) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 w-full">
       <button
         onClick={onSelect}
         className={cn(
@@ -50,7 +51,7 @@ export function JobListItem({ job, isSelected, onSelect, onEdit, onDelete }: Job
           {job.status === "failed" && <AlertTriangle className="w-4 h-4 text-destructive" />}
         </div>
         <p className="text-xs text-muted-foreground mt-1">
-          {job.createdAt ? formatDistanceToNow(job.createdAt, { addSuffix: true }) : '...'}
+          {job.createdAt ? formatDistanceToNow(new Date(job.createdAt), { addSuffix: true }) : '...'}
         </p>
       </button>
        <AlertDialog>

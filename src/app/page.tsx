@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -80,11 +81,19 @@ export default function Home() {
       });
       setJobs(jobsData);
       if (!selectedJob && jobsData.length > 0) {
-        setSelectedJob(jobsData[0]);
+        const currentJob = jobsData.find(j => j.id === selectedJob?.id) || jobsData[0];
+        setSelectedJob(currentJob);
       }
+    }, (error) => {
+      console.error("Error fetching jobs:", error);
+      toast({
+          variant: "destructive",
+          title: "Failed to load jobs",
+          description: "Could not retrieve job list from the database."
+      });
     });
     return () => unsubscribe();
-  }, [selectedJob]);
+  }, []);
 
   // Fetch candidates for selected job
   useEffect(() => {
@@ -100,10 +109,17 @@ export default function Home() {
             selected: false,
         } as ClientCandidate));
         setCandidates(candidatesData);
+    }, (error) => {
+      console.error(`Error fetching candidates for job ${selectedJob.id}:`, error);
+      toast({
+          variant: "destructive",
+          title: "Failed to load candidates",
+          description: "Could not retrieve candidates for the selected job."
+      });
     });
 
     return () => unsubscribe();
-  }, [selectedJob]);
+  }, [selectedJob, toast]);
 
 
   const handleCreateOrUpdateJob = async (e: React.FormEvent) => {
@@ -120,10 +136,19 @@ export default function Home() {
         toast({ title: "Job updated successfully!" });
         const updatedJob = { ...jobToEdit, title: jobTitleForNewJob, jobDescription: jobDescriptionForNewJob };
         setSelectedJob(updatedJob);
+         // Find the job in the list and update it
+        setJobs(prevJobs => prevJobs?.map(j => j.id === updatedJob.id ? updatedJob : j) || null);
       } else { // Creating new job
         const { jobId } = await createJobAndRankCandidates(jobTitleForNewJob, jobDescriptionForNewJob, files);
         toast({ title: "Job created and resumes are being processed!" });
-        // The new job will be picked up by the snapshot listener
+         // The new job will be picked up by the snapshot listener, so we just need to select it
+         // This is a bit of a hack, ideally we'd get the new job back and select it
+        setTimeout(() => {
+            if (jobs && jobs.length > 0) {
+              const newJob = jobs.find(j => j.id === jobId);
+              if (newJob) setSelectedJob(newJob);
+            }
+        }, 1000);
       }
       resetJobForm();
     } catch (error) {
@@ -143,7 +168,7 @@ export default function Home() {
       await deleteJob(jobId);
       toast({ title: "Job deleted successfully" });
       if (selectedJob?.id === jobId) {
-        setSelectedJob(jobs && jobs.length > 1 ? jobs[0] : null);
+         setSelectedJob(jobs && jobs.length > 1 ? jobs.filter(j => j.id !== jobId)[0] : null);
       }
     } catch (error) {
        toast({ variant: 'destructive', title: 'Failed to delete job', description: error instanceof Error ? error.message : 'Unknown error'});
@@ -155,6 +180,7 @@ export default function Home() {
     setJobTitleForNewJob("");
     setJobDescriptionForNewJob("");
     setFiles([]);
+    setSelectedJob(null);
     setIsCreatingOrEditingJob(true);
   }
 
@@ -163,6 +189,7 @@ export default function Home() {
     setJobTitleForNewJob(job.title);
     setJobDescriptionForNewJob(job.jobDescription);
     setFiles([]);
+    setSelectedJob(job);
     setIsCreatingOrEditingJob(true);
   }
 
@@ -172,6 +199,11 @@ export default function Home() {
     setJobDescriptionForNewJob("");
     setFiles([]);
     setIsCreatingOrEditingJob(false);
+    if (jobs && jobs.length > 0) {
+        setSelectedJob(jobs[0]);
+    } else {
+        setSelectedJob(null);
+    }
   }
 
   const handleSelectCandidate = (id: string, selected: boolean) => {
@@ -255,7 +287,7 @@ export default function Home() {
     }
 
     if (!selectedJob) {
-      return (
+       return (
         <div className="text-center py-12">
           <Briefcase className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-xl font-semibold">No Jobs Found</h2>
@@ -341,12 +373,7 @@ export default function Home() {
                                     setIsCreatingOrEditingJob(false);
                                   }}
                                   onEdit={() => startEditingJob(job)}
-                                  onDelete={(jobId) => {
-                                      // Simple confirm, can be replaced by a custom dialog
-                                      if (window.confirm('Are you sure you want to delete this job?')) {
-                                          handleDeleteJob(jobId)
-                                      }
-                                  }}
+                                  onDelete={handleDeleteJob}
                                 />
                             </SidebarMenuItem>
                         ))}
@@ -358,7 +385,7 @@ export default function Home() {
         <SidebarInset>
              <header className="flex items-center gap-4 px-6 py-4 border-b">
                 <SidebarTrigger className="md:hidden" />
-                <h1 className="text-2xl font-bold tracking-tight font-headline">{selectedJob?.title || "Dashboard"}</h1>
+                <h1 className="text-2xl font-bold tracking-tight font-headline">{isCreatingOrEditingJob ? (jobToEdit ? 'Edit Job' : 'Create Job') : (selectedJob?.title || "Dashboard")}</h1>
             </header>
              <main className="flex-1 p-4 md:p-6 lg:p-8">
                 {renderContent()}
