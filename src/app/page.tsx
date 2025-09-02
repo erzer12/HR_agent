@@ -8,7 +8,7 @@ import { db } from "@/lib/firebase";
 
 import type { ClientCandidate, Job } from "@/lib/types";
 import { draftPersonalizedConfirmationEmail } from "@/ai/flows/draft-personalized-confirmation-emails";
-import { createJobAndRankCandidates, updateJob, deleteJob } from "@/lib/actions";
+import { createJobAndRankCandidates, updateJob, deleteJob, addResumesToJob } from "@/lib/actions";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 import { Sidebar, SidebarContent, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuItem, SidebarTrigger } from "@/components/ui/sidebar";
-import { Plus, Send, Loader2, FileText, Calendar, Briefcase } from "lucide-react";
+import { Plus, Send, Loader2, FileText, Calendar, Briefcase, Upload } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -65,6 +65,8 @@ export default function Home() {
   const [files, setFiles] = useState<File[]>([]);
   const [jobDescriptionForNewJob, setJobDescriptionForNewJob] = useState("");
   const [jobTitleForNewJob, setJobTitleForNewJob] = useState("");
+  const [newResumeFiles, setNewResumeFiles] = useState<File[]>([]);
+  const [isAddingResumes, setIsAddingResumes] = useState(false);
 
 
   // Fetch jobs from Firestore
@@ -160,6 +162,29 @@ export default function Home() {
       });
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleAddResumes = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedJob || newResumeFiles.length === 0) {
+      toast({ variant: 'destructive', title: 'Please select resume files.'});
+      return;
+    }
+    setIsAddingResumes(true);
+    try {
+      await addResumesToJob(selectedJob.id, newResumeFiles);
+      toast({ title: "Resumes added and are being processed!" });
+      setNewResumeFiles([]);
+    } catch (error) {
+       console.error("Error adding resumes:", error);
+      toast({
+        variant: "destructive",
+        title: "Failed to Add Resumes",
+        description: error instanceof Error ? error.message : "An unknown error occurred.",
+      });
+    } finally {
+        setIsAddingResumes(false);
     }
   };
 
@@ -317,8 +342,29 @@ export default function Home() {
                     <div className="text-center py-8 text-muted-foreground">No candidates have been analyzed for this job yet.</div>
                 )}
                  {selectedJob.status === 'failed' && (
-                    <div className="text-destructive p-4 bg-destructive/10 rounded-md">Processing failed for this job. Please try creating a new job.</div>
+                    <div className="text-destructive p-4 bg-destructive/10 rounded-md">Processing failed for this job. Please try creating a new job or upload resumes below.</div>
                 )}
+            </CardContent>
+        </Card>
+
+        <Card>
+            <CardHeader>
+                <CardTitle>Add More Resumes</CardTitle>
+                <CardDescription>Upload additional resumes to analyze for this job posting.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <form onSubmit={handleAddResumes} className="space-y-4">
+                     <div className="space-y-2">
+                        <Label htmlFor="new-resume-upload">Upload Resumes</Label>
+                        <Input id="new-resume-upload" type="file" multiple accept=".pdf" onChange={(e) => setNewResumeFiles(e.target.files ? Array.from(e.target.files) : [])} className="h-11" />
+                    </div>
+                     <div className="flex justify-end">
+                        <Button type="submit" disabled={isAddingResumes || newResumeFiles.length === 0}>
+                            {isAddingResumes ? <Loader2 className="animate-spin" /> : <Upload />}
+                            Upload & Analyze
+                        </Button>
+                    </div>
+                </form>
             </CardContent>
         </Card>
 

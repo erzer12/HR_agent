@@ -2,9 +2,16 @@
 "use server";
 
 import { rankCandidates } from "@/ai/flows/rank-candidates-against-job-description";
-import { addDoc, collection, serverTimestamp, doc, updateDoc, writeBatch, getDocs, query, where } from "firebase/firestore";
+import { addDoc, collection, serverTimestamp, doc, updateDoc, writeBatch, getDocs, getDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import type { ClientCandidate, Job } from "./types";
+
+// Helper function to read file as a data URI on the server
+const fileToDataURL = async (file: File): Promise<string> => {
+    const buffer = await file.arrayBuffer();
+    const b64 = Buffer.from(buffer).toString('base64');
+    return `data:${file.type};base64,${b64}`;
+};
 
 export async function createJobAndRankCandidates(title: string, jobDescription: string, resumeFiles: File[]) {
   if (!jobDescription.trim() || !title.trim()) {
@@ -22,13 +29,6 @@ export async function createJobAndRankCandidates(title: string, jobDescription: 
   if (resumeFiles.length === 0) {
       return { jobId: jobDocRef.id };
   }
-
-  // Function to read file as a data URI on the server
-  const fileToDataURL = async (file: File): Promise<string> => {
-    const buffer = await file.arrayBuffer();
-    const b64 = Buffer.from(buffer).toString('base64');
-    return `data:${file.type};base64,${b64}`;
-  };
 
   try {
     const resumeDataURLs = await Promise.all(resumeFiles.map(fileToDataURL));
@@ -67,6 +67,64 @@ export async function createJobAndRankCandidates(title: string, jobDescription: 
         throw new Error(`Ranking failed: ${error.message}`);
     }
     throw new Error("An unknown error occurred during ranking.");
+  }
+}
+
+export async function addResumesToJob(jobId: string, resumeFiles: File[]) {
+  if (!jobId) {
+    throw new Error("Job ID is required.");
+  }
+  if (resumeFiles.length === 0) {
+    throw new Error("Please select at least one resume file.");
+  }
+
+  const jobDocRef = doc(db, "jobs", jobId);
+
+  await updateDoc(jobDocRef, { status: 'processing' });
+  
+  try {
+    const jobSnapshot = await getDoc(jobDocRef);
+    if (!jobSnapshot.exists()) {
+        throw new Error("Job not found.");
+    }
+    const jobData = jobSnapshot.data();
+    const jobDescription = jobData.jobDescription;
+
+    const resumeDataURLs = await Promise.all(resumeFiles.map(fileToDataURL));
+    
+    // Call the AI to rank candidates
+    const result = await rankCandidates({ jobDescription, resumes: resumeDataURLs });
+
+    // Save ranked candidates to the 'candidates' sub-collection
+    const candidatesCollectionRef = collection(db, "jobs", jobId, "candidates");
+    const batch = writeBatch(db);
+
+    for (const ranking of result.rankings) {
+      const candidateData: Omit<ClientCandidate, 'id' | 'selected'> = {
+        candidateName: ranking.candidateName,
+        candidateEmail: ranking.candidateEmail ?? null,
+        suitabilityScore: ranking.suitabilityScore,
+        summary: ranking.summary,
+        candidateIndex: ranking.candidateIndex,
+      };
+      const newCandidateRef = doc(candidatesCollectionRef);
+      batch.set(newCandidateRef, candidateData);
+    }
+    await batch.commit();
+    
+    // Update job status to completed
+    await updateDoc(jobDocRef, { status: 'completed' });
+    
+    return { jobId: jobId };
+
+  } catch (error) {
+    // If ranking fails, update job status to 'failed'
+    await updateDoc(jobDocRef, { status: 'failed' });
+    console.error("Error in addResumesToJob:", error);
+    if (error instanceof Error) {
+        throw new Error(`Adding resumes failed: ${error.message}`);
+    }
+    throw new Error("An unknown error occurred while adding resumes.");
   }
 }
 
