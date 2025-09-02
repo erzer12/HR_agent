@@ -56,19 +56,21 @@ export async function GET(req: NextRequest) {
     console.log('--- END OF PLACEHOLDER ---');
 
 
+    // Redirect the user back to the main page with a success query param
+    const response = NextResponse.redirect(
+      new URL('/?calendar=connected', req.nextUrl.origin)
+    );
+    
     // For the purpose of this demo, we'll set a simple cookie to simulate
     // a connected state. A real app would use a proper session.
-    cookies().set('google_calendar_connected', 'true', {
+    response.cookies.set('google_calendar_connected', 'true', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 60 * 60 * 24 * 7, // 1 week
       path: '/',
     });
     
-    // Redirect the user back to the main page with a success query param
-    return NextResponse.redirect(
-      new URL('/?calendar=connected', req.nextUrl.origin)
-    );
+    return response;
 
   } catch (error) {
     console.error("Error exchanging auth code for tokens:", error);
