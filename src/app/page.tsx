@@ -3,7 +3,6 @@
 import { useState } from "react";
 import type { ChangeEvent } from "react";
 import { rankCandidates } from "@/ai/flows/rank-candidates-against-job-description";
-import { draftPersonalizedConfirmationEmail } from "@/ai/flows/draft-personalized-confirmation-emails";
 import { useToast } from "@/hooks/use-toast";
 
 import type { ClientCandidate } from "@/lib/types";
@@ -130,29 +129,35 @@ export default function Home() {
     setIsInterviewDialogOpen(false);
     setIsEmailPreviewOpen(true);
     const selectedCandidates = candidates.filter(c => c.selected);
-    try {
-      for (const candidate of selectedCandidates) {
-        const candidateName = candidate.fileName.split('.').slice(0, -1).join('.').replace(/[-_]/g, ' ');
-        const result = await draftPersonalizedConfirmationEmail({
-          candidateName,
-          candidateEmail: 'candidate@example.com', // Placeholder
-          jobTitle: "the role", // Placeholder, could be extracted from JD
-          interviewDate: interviewDetails.date,
-          interviewTime: interviewDetails.time,
-          interviewerName: interviewDetails.interviewer,
-        });
-        setEmailDrafts(prevDrafts => [...prevDrafts, { candidateName, ...result }]);
-      }
-    } catch (error) {
-      console.error("Error drafting emails:", error);
-      toast({
-        variant: "destructive",
-        title: "Email Drafting Failed",
-        description: "An error occurred while drafting emails. Please try again.",
+    const jobTitle = "the role"; // Placeholder
+    
+    const generatedDrafts: EmailDraft[] = [];
+    for (const candidate of selectedCandidates) {
+      const candidateName = candidate.fileName.split('.').slice(0, -1).join('.').replace(/[-_]/g, ' ');
+      const emailSubject = `Interview Confirmation: ${jobTitle}`;
+      const emailBody = `Dear ${candidateName},
+
+Thank you for your interest in the ${jobTitle} position. We would like to invite you for an interview.
+
+Your interview is scheduled for:
+Date: ${interviewDetails.date}
+Time: ${interviewDetails.time}
+Interviewer: ${interviewDetails.interviewer}
+
+We look forward to speaking with you.
+
+Best regards,
+The Hiring Team`;
+
+      generatedDrafts.push({
+        candidateName,
+        subject: emailSubject,
+        body: emailBody
       });
-    } finally {
-      setIsEmailLoading(false);
     }
+    
+    setEmailDrafts(generatedDrafts);
+    setIsEmailLoading(false);
   };
   
   const selectedCount = candidates.filter(c => c.selected).length;
@@ -322,5 +327,3 @@ export default function Home() {
     </>
   );
 }
-
-    

@@ -31,31 +31,6 @@ export async function draftPersonalizedConfirmationEmail(input: DraftPersonalize
   return draftPersonalizedConfirmationEmailFlow(input);
 }
 
-const prompt = ai.definePrompt({
-  name: 'draftPersonalizedConfirmationEmailPrompt',
-  input: {schema: DraftPersonalizedConfirmationEmailInputSchema},
-  output: {schema: DraftPersonalizedConfirmationEmailOutputSchema},
-  prompt: `You are an AI assistant helping HR professionals draft personalized confirmation emails to candidates.
-
-  Given the following information about the candidate and the interview, draft a personalized confirmation email.  Include a warm greeting, reiterate the job title, and clearly state the interview date and time, along with the interviewer's name.
-  The email should also include a thank you and sign off professionally.
-
-  Candidate Name: {{{candidateName}}}
-  Job Title: {{{jobTitle}}}
-  Interview Date: {{{interviewDate}}}
-  Interview Time: {{{interviewTime}}}
-  Interviewer Name: {{{interviewerName}}}
-  Candidate Email: {{{candidateEmail}}}
-
-  Draft both the email subject and the email body.
-  Do not include any personally identifiable information other than what's provided.
-  Do not ask the candidate to call you.
-  Be personable, professional and inviting.
-  Keep the email body short and to the point.
-  Be sure to thank the candidate for their interest.
-`,
-});
-
 const draftPersonalizedConfirmationEmailFlow = ai.defineFlow(
   {
     name: 'draftPersonalizedConfirmationEmailFlow',
@@ -63,7 +38,32 @@ const draftPersonalizedConfirmationEmailFlow = ai.defineFlow(
     outputSchema: DraftPersonalizedConfirmationEmailOutputSchema,
   },
   async input => {
-    const {output} = await prompt(input);
-    return output!;
+    const {
+        candidateName,
+        jobTitle,
+        interviewDate,
+        interviewTime,
+        interviewerName,
+    } = input;
+
+    const emailSubject = `Interview Confirmation: ${jobTitle}`;
+    const emailBody = `Dear ${candidateName},
+
+Thank you for your interest in the ${jobTitle} position. We would like to invite you for an interview.
+
+Your interview is scheduled for:
+Date: ${interviewDate}
+Time: ${interviewTime}
+Interviewer: ${interviewerName}
+
+We look forward to speaking with you.
+
+Best regards,
+The Hiring Team`;
+
+    return {
+      emailSubject,
+      emailBody,
+    };
   }
 );
