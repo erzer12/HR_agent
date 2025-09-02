@@ -114,7 +114,7 @@ export default function Home() {
       });
     });
     return () => unsubscribe();
-  }, [selectedJob?.id]);
+  }, [selectedJob?.id, toast]);
 
   // Fetch candidates for selected job
   useEffect(() => {
@@ -172,7 +172,10 @@ export default function Home() {
         const updatedJob = { ...jobToEdit, title: jobTitleForNewJob, jobDescription: jobDescriptionForNewJob };
         setSelectedJob(updatedJob);
          // Find the job in the list and update it
-        setJobs(prevJobs => prevJobs?.map(j => j.id === updatedJob.id ? updatedJob : j) || null);
+        setJobs(prevJobs => {
+            if (!prevJobs) return null;
+            return prevJobs.map(j => j.id === updatedJob.id ? updatedJob : j);
+        });
       } else { // Creating new job
         const { jobId } = await createJobAndRankCandidates(jobTitleForNewJob, jobDescriptionForNewJob, files);
         toast({ title: "Job created and resumes are being processed!" });
