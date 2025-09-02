@@ -22,9 +22,6 @@ import { google } from "googleapis";
 import { oAuth2Client } from "./google-auth-client";
 
 
-// Initialize Resend - Make sure RESEND_API_KEY is in your .env file
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 // Helper function to read file as a data URI on the server
 const fileToDataURL = async (file: File): Promise<string> => {
   const buffer = await file.arrayBuffer();
@@ -185,27 +182,40 @@ export async function deleteAllCandidates(jobId: string) {
 // ---------------------------
 // Email Sending with Resend
 // ---------------------------
+let resend: Resend | null = null;
+
+const initializeResend = () => {
+    if (!resend) {
+        if (!process.env.RESEND_API_KEY) {
+            console.warn("RESEND_API_KEY not found in .env. Skipping email sending.");
+        } else {
+            resend = new Resend(process.env.RESEND_API_KEY);
+        }
+    }
+    return resend;
+}
 
 export async function sendInterviewEmail(to: string, subject: string, body: string) {
-  if (!process.env.RESEND_API_KEY) {
-    console.warn("RESEND_API_KEY not found. Skipping email sending. Please add it to your .env file.");
-    // To avoid breaking the flow, we'll "succeed" in dev, but you should handle this properly.
-    return;
-  }
-  try {
-    await resend.emails.send({
-      // NOTE: This "from" address must be a verified domain on Resend.
-      from: "ResumeRank <onboarding@resend.dev>",
-      to: [to],
-      subject: subject,
-      html: body.replace(/\n/g, "<br>"),
-    });
-    console.log(`Email sent to ${to}`);
-  } catch (error) {
-    console.error(`Failed to send email to ${to}:`, error);
-    // We throw an error so the UI can catch it and inform the user.
-    throw new Error(`Failed to send email to ${to}.`);
-  }
+    const resendClient = initializeResend();
+    if (!resendClient) {
+        // To avoid breaking the flow in development, we'll log instead of throwing.
+        console.log(`WOULD SEND EMAIL TO: ${to}\nSUBJECT: ${subject}\nBODY: ${body}`);
+        return;
+    }
+    try {
+        await resendClient.emails.send({
+            // NOTE: This "from" address must be a verified domain on Resend.
+            from: "ResumeRank <onboarding@resend.dev>",
+            to: [to],
+            subject: subject,
+            html: body.replace(/\n/g, "<br>"),
+        });
+        console.log(`Email sent to ${to}`);
+    } catch (error) {
+        console.error(`Failed to send email to ${to}:`, error);
+        // We throw an error so the UI can catch it and inform the user.
+        throw new Error(`Failed to send email to ${to}.`);
+    }
 }
 
 // ---------------------------------
