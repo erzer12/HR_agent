@@ -9,6 +9,7 @@
  */
 
 import {ai} from '@/ai/genkit';
+import {googleAI} from '@genkit-ai/googleai';
 import {z} from 'genkit';
 
 const DraftPersonalizedConfirmationEmailInputSchema = z.object({
@@ -46,6 +47,7 @@ const prompt = ai.definePrompt({
   name: 'draftPersonalizedConfirmationEmailPrompt',
   input: {schema: DraftPersonalizedConfirmationEmailInputSchema},
   output: {schema: DraftPersonalizedConfirmationEmailOutputSchema},
+  model: googleAI.model('gemini-2.5-flash'),
   prompt: `You are an HR assistant. Draft a personalized confirmation email to a candidate with interview details.
 
   Candidate Name: {{{candidateName}}}
