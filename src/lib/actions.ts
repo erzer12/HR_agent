@@ -2,22 +2,26 @@
 "use server";
 
 import { rankCandidates } from "@/ai/flows/rank-candidates-against-job-description";
-import { addDoc, collection, serverTimestamp, doc, updateDoc, getDoc, writeBatch, getDocs } from "firebase/firestore";
+import { addDoc, collection, serverTimestamp, doc, updateDoc, writeBatch, getDocs, query, where } from "firebase/firestore";
 import { db } from "./firebase";
 import type { ClientCandidate, Job } from "./types";
 
-export async function createJobAndRankCandidates(jobDescription: string, resumeFiles: File[]) {
-  if (!jobDescription.trim() || resumeFiles.length === 0) {
-    throw new Error("Please provide a job description and upload resumes.");
+export async function createJobAndRankCandidates(title: string, jobDescription: string, resumeFiles: File[]) {
+  if (!jobDescription.trim() || !title.trim()) {
+    throw new Error("Please provide a job title and description.");
   }
 
   // 1. Create a job document in Firestore
   const jobDocRef = await addDoc(collection(db, "jobs"), {
+    title: title,
     jobDescription: jobDescription,
     createdAt: serverTimestamp(),
-    status: 'processing',
-    title: 'New Job Posting' // Placeholder title
+    status: resumeFiles.length > 0 ? 'processing' : 'completed',
   });
+
+  if (resumeFiles.length === 0) {
+      return { jobId: jobDocRef.id };
+  }
 
   // Function to read file as a data URI on the server
   const fileToDataURL = async (file: File): Promise<string> => {
@@ -37,9 +41,9 @@ export async function createJobAndRankCandidates(jobDescription: string, resumeF
     const batch = writeBatch(db);
 
     for (const ranking of result.rankings) {
-      const candidateData: Omit<ClientCandidate, 'id' | 'selected' | 'fileName'> = {
+      const candidateData: Omit<ClientCandidate, 'id' | 'selected'> = {
         candidateName: ranking.candidateName,
-        candidateEmail: ranking.candidateEmail ?? null, // Ensure email is not undefined
+        candidateEmail: ranking.candidateEmail ?? null,
         suitabilityScore: ranking.suitabilityScore,
         summary: ranking.summary,
         candidateIndex: ranking.candidateIndex,
@@ -49,21 +53,9 @@ export async function createJobAndRankCandidates(jobDescription: string, resumeF
     }
     await batch.commit();
     
-    // 4. Update job status
+    // 4. Update job status to completed
     await updateDoc(jobDocRef, { status: 'completed' });
     
-    // 5. Optionally, generate a job title from the description
-    // This could be another AI call, for now we keep it simple
-    const jobDoc = await getDoc(jobDocRef);
-    const jobData = jobDoc.data() as Job;
-
-    // A simple title extraction
-    const extractedTitle = jobDescription.substring(0, 50).split('\n')[0];
-    const finalTitle = extractedTitle.includes('Title:') ? extractedTitle.split('Title:')[1].trim() : extractedTitle;
-    
-    await updateDoc(jobDocRef, { title: finalTitle || 'Untitled Job' });
-
-
     return { jobId: jobDocRef.id };
 
   } catch (error) {
@@ -89,17 +81,14 @@ export async function deleteJob(jobId: string) {
     
     const batch = writeBatch(db);
     
-    // 1. Delete all candidates in the subcollection
     const candidatesRef = collection(db, "jobs", jobId, "candidates");
     const candidatesSnapshot = await getDocs(candidatesRef);
     candidatesSnapshot.forEach(doc => {
         batch.delete(doc.ref);
     });
 
-    // 2. Delete the job document itself
     const jobRef = doc(db, "jobs", jobId);
     batch.delete(jobRef);
     
-    // 3. Commit the batch
     await batch.commit();
 }

@@ -1,22 +1,39 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { collection, onSnapshot, query, orderBy, Timestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
-import type { ClientCandidate } from "@/lib/types";
-import { rankCandidates as rankCandidatesFlow } from "@/ai/flows/rank-candidates-against-job-description";
+import type { ClientCandidate, Job } from "@/lib/types";
 import { draftPersonalizedConfirmationEmail } from "@/ai/flows/draft-personalized-confirmation-emails";
+import { createJobAndRankCandidates, updateJob, deleteJob } from "@/lib/actions";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { CandidateCard } from "@/components/candidate-card";
 import { Logo } from "@/components/logo";
-import { JobCreationForm } from "@/components/job-creation-form";
 import { EmailPreviewDialog } from "@/components/email-preview-dialog";
+import { JobListItem } from "@/components/job-list-item";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
-import { Sparkles, FileText, ArrowLeft, Loader2, FileUp, Send } from "lucide-react";
+import { Sidebar, SidebarContent, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuItem, SidebarTrigger } from "@/components/ui/sidebar";
+import { Plus, Send, Loader2, FileText, Calendar, Briefcase } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type EmailDraft = {
   candidateName: string;
@@ -24,73 +41,96 @@ type EmailDraft = {
   body: string;
 };
 
+type JobWithDate = Omit<Job, 'createdAt'> & { createdAt: Date };
+
+
 export default function Home() {
   const { toast } = useToast();
 
-  const [step, setStep] = useState(1);
-  const [jobDescription, setJobDescription] = useState("");
-  const [jobTitle, setJobTitle] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
-  const [candidates, setCandidates] = useState<ClientCandidate[]>([]);
-  
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [jobDetails, setJobDetails] = useState<{title: string, description: string} | null>(null);
+  // Job state
+  const [jobs, setJobs] = useState<JobWithDate[] | null>(null);
+  const [selectedJob, setSelectedJob] = useState<JobWithDate | null>(null);
+  const [isCreatingOrEditingJob, setIsCreatingOrEditingJob] = useState(false);
+  const [jobToEdit, setJobToEdit] = useState<JobWithDate | null>(null);
 
+  // Candidate state
+  const [candidates, setCandidates] = useState<ClientCandidate[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // UI State
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [isGeneratingEmails, setIsGeneratingEmails] = useState(false);
   const [emailDrafts, setEmailDrafts] = useState<EmailDraft[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
+  const [jobDescriptionForNewJob, setJobDescriptionForNewJob] = useState("");
+  const [jobTitleForNewJob, setJobTitleForNewJob] = useState("");
 
 
-  const handleFilesSelected = (selectedFiles: File[]) => {
-    setFiles(selectedFiles);
-    setStep(3); // Move to the confirmation step
-  };
-  
-  const handleProcessResumes = async () => {
-    if (!jobDetails) {
-        toast({ variant: 'destructive', title: 'Job details are missing.'});
-        return;
+  // Fetch jobs from Firestore
+  useEffect(() => {
+    const q = query(collection(db, "jobs"), orderBy("createdAt", "desc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const jobsData = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: (data.createdAt as Timestamp)?.toDate() || new Date(),
+        } as JobWithDate;
+      });
+      setJobs(jobsData);
+      if (!selectedJob && jobsData.length > 0) {
+        setSelectedJob(jobsData[0]);
+      }
+    });
+    return () => unsubscribe();
+  }, [selectedJob]);
+
+  // Fetch candidates for selected job
+  useEffect(() => {
+    if (!selectedJob) {
+      setCandidates([]);
+      return;
+    };
+    const candidatesQuery = query(collection(db, "jobs", selectedJob.id, "candidates"), orderBy("suitabilityScore", "desc"));
+    const unsubscribe = onSnapshot(candidatesQuery, (snapshot) => {
+        const candidatesData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            selected: false,
+        } as ClientCandidate));
+        setCandidates(candidatesData);
+    });
+
+    return () => unsubscribe();
+  }, [selectedJob]);
+
+
+  const handleCreateOrUpdateJob = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!jobTitleForNewJob.trim() || !jobDescriptionForNewJob.trim()) {
+      toast({ variant: 'destructive', title: 'Title and description are required.' });
+      return;
     }
-    if (files.length === 0) {
-        toast({ variant: 'destructive', title: 'Please upload some resumes.'});
-        return;
-    }
-
+    
     setIsProcessing(true);
     try {
-      const fileToDataURL = (file: File): Promise<string> => {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-      };
-      
-      const resumeDataURLs = await Promise.all(files.map(fileToDataURL));
-
-      const result = await rankCandidatesFlow({ jobDescription: jobDetails.description, resumes: resumeDataURLs });
-
-      const rankedCandidates: ClientCandidate[] = result.rankings.map(ranking => ({
-        id: `candidate-${ranking.candidateIndex}`,
-        ...ranking,
-        candidateEmail: ranking.candidateEmail ?? null,
-        selected: false,
-      })).sort((a, b) => b.suitabilityScore - a.suitabilityScore);
-
-
-      setCandidates(rankedCandidates);
-      
-      toast({
-        title: "Analysis Complete!",
-        description: "Candidates have been ranked below.",
-      });
-      setStep(4);
+      if (jobToEdit) { // Editing existing job
+        await updateJob(jobToEdit.id, { title: jobTitleForNewJob, jobDescription: jobDescriptionForNewJob });
+        toast({ title: "Job updated successfully!" });
+        const updatedJob = { ...jobToEdit, title: jobTitleForNewJob, jobDescription: jobDescriptionForNewJob };
+        setSelectedJob(updatedJob);
+      } else { // Creating new job
+        const { jobId } = await createJobAndRankCandidates(jobTitleForNewJob, jobDescriptionForNewJob, files);
+        toast({ title: "Job created and resumes are being processed!" });
+        // The new job will be picked up by the snapshot listener
+      }
+      resetJobForm();
     } catch (error) {
-      console.error("Error processing resumes:", error);
+      console.error("Error creating/updating job:", error);
       toast({
         variant: "destructive",
-        title: "Processing Failed",
+        title: "Operation Failed",
         description: error instanceof Error ? error.message : "An unknown error occurred.",
       });
     } finally {
@@ -98,13 +138,49 @@ export default function Home() {
     }
   };
 
+  const handleDeleteJob = async (jobId: string) => {
+    try {
+      await deleteJob(jobId);
+      toast({ title: "Job deleted successfully" });
+      if (selectedJob?.id === jobId) {
+        setSelectedJob(jobs && jobs.length > 1 ? jobs[0] : null);
+      }
+    } catch (error) {
+       toast({ variant: 'destructive', title: 'Failed to delete job', description: error instanceof Error ? error.message : 'Unknown error'});
+    }
+  };
+  
+  const startNewJob = () => {
+    setJobToEdit(null);
+    setJobTitleForNewJob("");
+    setJobDescriptionForNewJob("");
+    setFiles([]);
+    setIsCreatingOrEditingJob(true);
+  }
+
+  const startEditingJob = (job: JobWithDate) => {
+    setJobToEdit(job);
+    setJobTitleForNewJob(job.title);
+    setJobDescriptionForNewJob(job.jobDescription);
+    setFiles([]);
+    setIsCreatingOrEditingJob(true);
+  }
+
+  const resetJobForm = () => {
+    setJobToEdit(null);
+    setJobTitleForNewJob("");
+    setJobDescriptionForNewJob("");
+    setFiles([]);
+    setIsCreatingOrEditingJob(false);
+  }
+
   const handleSelectCandidate = (id: string, selected: boolean) => {
     setCandidates(prev => prev.map(c => c.id === id ? { ...c, selected } : c));
   };
 
   const handleGenerateEmails = async () => {
     const selectedCandidates = candidates.filter(c => c.selected);
-    if (selectedCandidates.length === 0 || !jobDetails) return;
+    if (selectedCandidates.length === 0 || !selectedJob) return;
 
     setIsEmailDialogOpen(true);
     setIsGeneratingEmails(true);
@@ -115,8 +191,7 @@ export default function Home() {
       for (const candidate of selectedCandidates) {
         const result = await draftPersonalizedConfirmationEmail({
           candidateName: candidate.candidateName,
-          jobTitle: jobDetails.title,
-          // These are placeholder details for the MVP
+          jobTitle: selectedJob.title,
           interviewDate: "to be confirmed",
           interviewTime: "to be confirmed",
           interviewerName: "the Hiring Manager",
@@ -127,7 +202,7 @@ export default function Home() {
           subject: result.emailSubject,
           body: result.emailBody,
         });
-        setEmailDrafts([...drafts]); // Update state incrementally
+        setEmailDrafts([...drafts]);
       }
     } catch (error) {
       console.error("Error generating emails:", error);
@@ -141,125 +216,154 @@ export default function Home() {
     }
   };
   
-  const startOver = () => {
-    setStep(1);
-    setJobDescription("");
-    setJobTitle("");
-    setFiles([]);
-    setCandidates([]);
-    setIsProcessing(false);
-    setJobDetails(null);
-    setEmailDrafts([]);
-    setIsEmailDialogOpen(false);
-    setIsGeneratingEmails(false);
-  }
-
   const selectedCount = candidates.filter(c => c.selected).length;
 
-  const renderStep = () => {
-    switch (step) {
-      case 1:
-        return <JobCreationForm onNext={(title, description) => {
-            setJobTitle(title);
-            setJobDescription(description);
-            setJobDetails({title, description});
-            setStep(2);
-        }} />;
-      case 2:
-        return (
-            <Card className="w-full max-w-2xl">
+  const renderContent = () => {
+    if (isCreatingOrEditingJob) {
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>{jobToEdit ? 'Edit Job' : 'Create New Job'}</CardTitle>
+            <CardDescription>{jobToEdit ? 'Update the details for this job.' : 'Enter a title, description, and upload resumes to get started.'}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleCreateOrUpdateJob} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="job-title">Role Title</Label>
+                <Input id="job-title" placeholder="e.g., Senior Frontend Engineer" value={jobTitleForNewJob} onChange={e => setJobTitleForNewJob(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="job-description">Job Description</Label>
+                <Textarea id="job-description" placeholder="Paste the full job description here..." value={jobDescriptionForNewJob} onChange={e => setJobDescriptionForNewJob(e.target.value)} className="min-h-[150px]" />
+              </div>
+              {!jobToEdit && (
+                <div className="space-y-2">
+                  <Label htmlFor="resume-upload">Upload Resumes</Label>
+                  <Input id="resume-upload" type="file" multiple accept=".pdf" onChange={(e) => setFiles(e.target.files ? Array.from(e.target.files) : [])} className="h-11" />
+                </div>
+              )}
+               <div className="flex justify-between items-center pt-4">
+                <Button type="button" variant="ghost" onClick={resetJobForm}>Cancel</Button>
+                <Button type="submit" disabled={isProcessing}>
+                  {isProcessing ? <Loader2 className="animate-spin" /> : (jobToEdit ? 'Save Changes' : 'Create & Analyze')}
+                </Button>
+               </div>
+            </form>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    if (!selectedJob) {
+      return (
+        <div className="text-center py-12">
+          <Briefcase className="mx-auto h-12 w-12 text-muted-foreground" />
+          <h2 className="mt-4 text-xl font-semibold">No Jobs Found</h2>
+          <p className="mt-2 text-muted-foreground">Get started by creating a new job posting.</p>
+          <Button className="mt-6" onClick={startNewJob}>
+            <Plus className="mr-2"/> Create New Job
+          </Button>
+        </div>
+      )
+    }
+
+    return (
+       <div className="space-y-6">
+        <Card>
+            <CardHeader>
+                <CardTitle>Candidate Review</CardTitle>
+                <CardDescription>Found {candidates.length} candidates for: <span className="font-semibold text-primary">{selectedJob.title}</span></CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                {selectedJob.status === 'processing' && (
+                    <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="animate-spin" /> Analyzing resumes...</div>
+                )}
+                {selectedJob.status === 'completed' && candidates.map(candidate => (
+                    <CandidateCard key={candidate.id} candidate={candidate} onSelect={handleSelectCandidate} />
+                ))}
+                 {selectedJob.status === 'failed' && (
+                    <div className="text-destructive">Processing failed for this job.</div>
+                )}
+            </CardContent>
+        </Card>
+
+        {candidates.length > 0 && (
+            <Card>
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><FileUp className="text-primary"/> 2. Upload Resumes</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <p className="text-muted-foreground">Upload resumes in PDF format. You can select multiple files at once.</p>
-                     <div className="space-y-2">
-                        <Label htmlFor="resume-upload">Resume Files</Label>
-                        <Input id="resume-upload" type="file" multiple accept=".pdf" onChange={(e) => handleFilesSelected(e.target.files ? Array.from(e.target.files) : [])} className="h-11"/>
-                    </div>
-                    <div className="flex justify-between mt-6">
-                        <Button variant="outline" onClick={() => setStep(1)}><ArrowLeft className="mr-2"/>Back</Button>
-                    </div>
-                </CardContent>
-            </Card>
-        )
-      case 3:
-        return (
-            <Card className="w-full max-w-2xl">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><Sparkles className="text-primary"/> 3. Analyze Resumes</CardTitle>
+                    <CardTitle>Next Steps</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="space-y-4">
-                        <div>
-                            <h3 className="font-semibold">Job Title</h3>
-                            <p className="text-muted-foreground bg-muted p-2 rounded-md mt-1">{jobDetails?.title}</p>
-                        </div>
-                         <div>
-                            <h3 className="font-semibold">Uploaded Resumes</h3>
-                            <div className="text-muted-foreground bg-muted p-3 rounded-md mt-1 space-y-1 text-sm">
-                                {files.map(f => <p key={f.name} className="flex items-center gap-2"><FileText className="w-4 h-4"/>{f.name}</p>)}
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex justify-between mt-6">
-                        <Button variant="outline" onClick={() => setStep(2)}><ArrowLeft className="mr-2"/>Back</Button>
-                        <Button className="bg-primary hover:bg-primary/90" onClick={handleProcessResumes} disabled={isProcessing}>
-                            {isProcessing ? <Loader2 className="animate-spin"/> : <Sparkles className="mr-2"/>}
-                            Process Resumes
-                        </Button>
-                    </div>
+                    <p>Selected {selectedCount} candidate(s). Proceed to the next step to draft interview emails.</p>
+                    <Button className="mt-4 bg-accent hover:bg-accent/90" disabled={selectedCount === 0} onClick={handleGenerateEmails}>
+                        <Send className="mr-2"/>
+                        Draft Emails for Selected Candidates
+                    </Button>
                 </CardContent>
             </Card>
-        )
-      case 4:
-        return (
-            <div className="w-full max-w-4xl">
-                 <div className="flex justify-between items-center mb-4">
-                    <div>
-                        <h2 className="text-2xl font-bold">Candidate Review Panel</h2>
-                        <p className="text-muted-foreground">Found {candidates.length} candidates for: <span className="font-semibold text-primary">{jobDetails?.title}</span></p>
-                    </div>
-                    <Button onClick={startOver}>Start New Round</Button>
-                 </div>
-                 <div className="space-y-4">
-                    {candidates.map(candidate => (
-                        <CandidateCard key={candidate.id} candidate={candidate} onSelect={handleSelectCandidate} />
-                    ))}
-                 </div>
-                 {candidates.length > 0 && (
-                    <div className="mt-8">
-                         <Card>
-                            <CardHeader>
-                                <CardTitle>Next Steps</CardTitle>
-                            </CardHeader>
-                             <CardContent>
-                                <p>Selected {selectedCount} candidate(s). Proceed to the next step to schedule interviews.</p>
-                                <Button className="mt-4 bg-accent hover:bg-accent/90" disabled={selectedCount === 0} onClick={handleGenerateEmails}>
-                                    <Send className="mr-2"/>
-                                    Draft Emails for Selected Candidates
-                                </Button>
-                             </CardContent>
-                         </Card>
-                    </div>
-                 )}
-            </div>
-        )
-      default:
-        return <p>Something went wrong.</p>;
-    }
-  };
+        )}
+
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Calendar className="w-5 h-5 text-muted-foreground" /> Calendar</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <p className="text-muted-foreground">Interview scheduling and calendar integration will be available here.</p>
+            </CardContent>
+        </Card>
+       </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900 font-sans">
-        <header className="flex items-center gap-4 px-6 py-4 border-b bg-background">
-          <Logo />
-          <h1 className="text-2xl font-bold tracking-tight font-headline">ResumeRank</h1>
-        </header>
+    <div className="flex">
+        <Sidebar>
+            <SidebarHeader>
+              <div className="flex items-center gap-2">
+                <Logo />
+                <h1 className="text-xl font-semibold tracking-tight font-headline">ResumeRank</h1>
+              </div>
+            </SidebarHeader>
+            <SidebarContent className="p-2">
+                <div className="flex justify-between items-center mb-2 px-2">
+                    <h2 className="text-lg font-semibold">Jobs</h2>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={startNewJob}><Plus/></Button>
+                </div>
+                <ScrollArea className="h-[calc(100vh-120px)]">
+                    <SidebarMenu>
+                        {jobs === null && Array.from({length: 3}).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+                        {jobs?.map(job => (
+                            <SidebarMenuItem key={job.id}>
+                                <JobListItem 
+                                  job={job}
+                                  isSelected={selectedJob?.id === job.id}
+                                  onSelect={() => {
+                                    setSelectedJob(job);
+                                    setIsCreatingOrEditingJob(false);
+                                  }}
+                                  onEdit={() => startEditingJob(job)}
+                                  onDelete={(jobId) => {
+                                      // Simple confirm, can be replaced by a custom dialog
+                                      if (window.confirm('Are you sure you want to delete this job?')) {
+                                          handleDeleteJob(jobId)
+                                      }
+                                  }}
+                                />
+                            </SidebarMenuItem>
+                        ))}
+                    </SidebarMenu>
+                </ScrollArea>
+            </SidebarContent>
+        </Sidebar>
 
-        <main className="flex-1 flex flex-col items-center justify-center p-4 md:p-8">
-            {renderStep()}
-        </main>
+        <SidebarInset>
+             <header className="flex items-center gap-4 px-6 py-4 border-b">
+                <SidebarTrigger className="md:hidden" />
+                <h1 className="text-2xl font-bold tracking-tight font-headline">{selectedJob?.title || "Dashboard"}</h1>
+            </header>
+             <main className="flex-1 p-4 md:p-6 lg:p-8">
+                {renderContent()}
+            </main>
+        </SidebarInset>
         
         <EmailPreviewDialog
             isOpen={isEmailDialogOpen}
