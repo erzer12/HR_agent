@@ -292,16 +292,16 @@ The Hiring Team`;
 
   return (
     <>
-      <div className="flex flex-col h-full">
-        <header className="flex items-center gap-4 px-6 py-4 border-b">
+      <div className="flex flex-col h-full bg-muted/30">
+        <header className="flex items-center gap-4 px-6 py-4 border-b bg-background">
           <Logo />
           <h1 className="text-2xl font-bold tracking-tight font-headline">ResumeRank</h1>
         </header>
 
         <main className="flex-1 overflow-auto">
-          <div className="grid h-full lg:grid-cols-[300px_1fr]">
-            <div className="flex flex-col gap-4 p-4 border-r bg-muted/20">
-              <div className="flex justify-between items-center">
+          <div className="grid h-full lg:grid-cols-[320px_1fr]">
+            <aside className="flex flex-col gap-4 p-4 border-r bg-background">
+              <div className="flex justify-between items-center px-2">
                 <h2 className="text-lg font-semibold flex items-center gap-2"><Briefcase/>Job Postings</h2>
                 <Button size="sm" onClick={() => setIsNewJobDialogOpen(true)}><PlusCircle className="mr-2"/>New Job</Button>
               </div>
@@ -318,39 +318,43 @@ The Hiring Team`;
                     />
                 ))}
                 {!isJobsLoading && jobs.length === 0 && (
-                    <div className="text-center text-muted-foreground p-8">
+                    <div className="text-center text-muted-foreground p-8 border-2 border-dashed rounded-lg mt-4">
                         <p>No jobs found.</p>
-                        <p className="text-sm">Create one to get started.</p>
+                        <p className="text-sm mt-1">Create one to get started.</p>
                     </div>
                 )}
               </div>
-            </div>
+            </aside>
             
             <div className="flex flex-col">
               <div className="flex-1 overflow-y-auto">
-                <Card className="h-full rounded-none border-0 shadow-none">
-                  <CardHeader className="sticky top-0 bg-background/95 backdrop-blur-sm z-10 border-b">
+                <div className="sticky top-0 bg-background/95 backdrop-blur-sm z-10 border-b p-4">
                       {selectedJob && (
                           <>
-                          <CardTitle className="flex items-center gap-2"><Users />Ranked Candidates for {selectedJob.title}</CardTitle>
-                          <CardDescription>
+                          <h2 className="text-xl font-semibold flex items-center gap-2"><Users />Ranked Candidates for: {selectedJob.title}</h2>
+                          <p className="text-sm text-muted-foreground mt-1">
                               {`Created ${formatDistanceToNow(selectedJob.createdAt!, { addSuffix: true })}`}
-                          </CardDescription>
+                          </p>
                           </>
                       )}
                       {!selectedJob && !isJobsLoading && (
                           <>
-                          <CardTitle>Welcome to ResumeRank</CardTitle>
-                          <CardDescription>Select a job on the left or create a new one to start ranking candidates.</CardDescription>
+                          <h2 className="text-xl font-semibold">Welcome to ResumeRank</h2>
+                          <p className="text-sm text-muted-foreground mt-1">Select a job on the left or create a new one to start ranking candidates.</p>
                           </>
                       )}
-                      {isJobsLoading && <Skeleton className="h-10 w-3/4"/>}
-                  </CardHeader>
-                  <CardContent className="p-4">
+                      {isJobsLoading && (
+                          <>
+                            <Skeleton className="h-7 w-3/5 mb-2"/>
+                            <Skeleton className="h-4 w-1/4"/>
+                          </>
+                      )}
+                </div>
+                  <div className="p-4">
                     {(isCandidatesLoading || (selectedJob?.status === 'processing' && candidates.length === 0)) && (
                        <div className="space-y-4">
                           {[...Array(3)].map((_, i) => (
-                             <div key={i} className="p-4 border rounded-lg space-y-3">
+                             <div key={i} className="p-4 border rounded-lg space-y-3 bg-background">
                                 <div className="flex justify-between items-center">
                                    <Skeleton className="h-5 w-1/3" />
                                    <Skeleton className="h-5 w-1/5" />
@@ -362,7 +366,7 @@ The Hiring Team`;
                        </div>
                     )}
                     {!isCandidatesLoading && selectedJobId && candidates.length === 0 && selectedJob?.status !== 'processing' &&(
-                      <div className="flex flex-col items-center justify-center text-center p-8 border-2 border-dashed rounded-lg h-96">
+                      <div className="flex flex-col items-center justify-center text-center p-8 border-2 border-dashed rounded-lg h-96 bg-background/50">
                         <FileText className="w-16 h-16 text-muted-foreground" />
                         <h3 className="mt-4 text-xl font-semibold">No Candidates Found</h3>
                         <p className="mt-2 text-muted-foreground">This job posting has no candidates yet.</p>
@@ -375,12 +379,11 @@ The Hiring Team`;
                         ))}
                       </div>
                     )}
-                  </CardContent>
-                </Card>
+                  </div>
               </div>
 
               {candidates.length > 0 && (
-                <div className="p-4 border-t bg-muted/20">
+                <div className="p-4 border-t bg-background">
                   <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-base">
@@ -434,7 +437,7 @@ The Hiring Team`;
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="resume-upload">Upload Resumes (PDF)</Label>
+                <Label htmlFor="resume-upload">Upload Resumes (.pdf, .docx, .doc)</Label>
                 <div className="relative">
                   <Input id="resume-upload" type="file" multiple accept=".pdf,.doc,.docx" onChange={handleFileChange} className="pr-12 h-11" />
                     <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
@@ -500,7 +503,7 @@ The Hiring Team`;
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setJobToDelete(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => handleDeleteJob(jobToDelete!)} disabled={isDeletingJob}>
+            <AlertDialogAction onClick={() => handleDeleteJob(jobToDelete!)} disabled={isDeletingJob} className="bg-destructive hover:bg-destructive/90">
               {isDeletingJob ? <Loader2 className="animate-spin" /> : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -556,5 +559,3 @@ The Hiring Team`;
     </>
   );
 }
-
-    
