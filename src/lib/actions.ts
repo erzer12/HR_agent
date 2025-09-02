@@ -18,6 +18,7 @@ import { db } from "./firebase";
 import type { ClientCandidate, Job } from "./types";
 
 import { Resend } from "resend";
+import { google } from "googleapis";
 
 // Initialize Resend - Make sure RESEND_API_KEY is in your .env file
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -219,31 +220,37 @@ export async function createCalendarEvent(details: { title: string, startTime: s
 
   // Example of what the call would look like with the 'googleapis' library
   /*
-  import { google } from 'googleapis';
   const oauth2Client = new google.auth.OAuth2(
     process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET, // This MUST be stored securely on the server
+    // The redirect URI used in the OAuth flow
+    // e.g., "http://localhost:3000/api/auth/google/callback" 
   );
   
-  // You would fetch these tokens from your secure storage (e.g., Firestore)
-  oauth2Client.setCredentials({ 
+  // You would fetch these tokens from your secure storage (e.g., Firestore) for the user
+  const tokens = { 
     access_token: 'USER_ACCESS_TOKEN',
     refresh_token: 'USER_REFRESH_TOKEN' 
-  });
+  };
+  oauth2Client.setCredentials(tokens);
+
   const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
   try {
     await calendar.events.insert({
       calendarId: 'primary',
       requestBody: {
         summary: details.title,
-        start: { dateTime: new Date(details.startTime).toISOString() },
-        end: { dateTime: new Date(details.endTime).toISOString() },
+        description: `Interview with ${details.attendeeEmail}`,
+        start: { dateTime: details.startTime, timeZone: 'UTC' },
+        end: { dateTime: details.endTime, timeZone: 'UTC' },
         attendees: [{ email: details.attendeeEmail }],
       },
     });
     console.log('Calendar event created successfully.');
   } catch (error) {
     console.error('Failed to create calendar event:', error);
+    // If the access token was expired, the googleapis library with a refresh token
+    // would typically handle refreshing it. If it fails for other reasons, we throw.
     throw new Error('Could not create calendar event.');
   }
   */

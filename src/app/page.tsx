@@ -8,7 +8,7 @@ import { db } from "@/lib/firebase";
 
 import type { ClientCandidate, Job } from "@/lib/types";
 import { draftPersonalizedConfirmationEmail } from "@/ai/flows/draft-personalized-confirmation-emails";
-import { createJobAndRankCandidates, updateJob, deleteJob, addResumesToJob, deleteCandidate, sendInterviewEmail } from "@/lib/actions";
+import { createJobAndRankCandidates, updateJob, deleteJob, addResumesToJob, deleteCandidate, sendInterviewEmail, createCalendarEvent } from "@/lib/actions";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -38,7 +38,7 @@ import { Plus, Send, Loader2, FileText, Calendar as CalendarIcon, Briefcase, Upl
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, add } from "date-fns";
 
 type EmailDraft = {
   candidateName: string;
@@ -310,44 +310,59 @@ export default function Home() {
   };
 
   const handleSendEmails = async () => {
-    if (emailDrafts.length === 0 || !interviewDate) return;
+    if (!selectedJob || emailDrafts.length === 0 || !interviewDate || !interviewTime) {
+        return;
+    }
     setIsSendingEmails(true);
     try {
-      await Promise.all(
-        emailDrafts.map(draft => {
-          if (draft.candidateEmail) {
-            return sendInterviewEmail(draft.candidateEmail, draft.subject, draft.body);
-          }
-          return Promise.resolve();
-        })
-      );
-      toast({ title: 'Emails sent successfully!' });
-      
-      // Add the date to the list of scheduled dates to be shown on the calendar
-      setScheduledDates(prev => {
-        // Avoid adding duplicate dates
-        if (prev.some(d => d.getTime() === interviewDate.getTime())) {
-          return prev;
-        }
-        return [...prev, interviewDate];
-      });
+        // Send emails
+        await Promise.all(
+            emailDrafts
+                .filter(draft => draft.candidateEmail)
+                .map(draft => 
+                    sendInterviewEmail(draft.candidateEmail!, draft.subject, draft.body)
+                )
+        );
+        toast({ title: 'Emails sent successfully!' });
 
-       // Here you would also trigger the Google Calendar event creation
-       // For now, we'll just log it.
-      console.log('TODO: Trigger Google Calendar event creation for date:', interviewDate, 'and time:', interviewTime);
-      setIsEmailDialogOpen(false);
+        // Add the date to the list of scheduled dates to be shown on the calendar
+        setScheduledDates(prev => {
+            if (prev.some(d => d.getTime() === interviewDate.getTime())) {
+                return prev;
+            }
+            return [...prev, interviewDate];
+        });
+
+        // Parse time and combine with date
+        const [hours, minutes] = interviewTime.split(':').map(Number);
+        const startTime = add(interviewDate, { hours, minutes });
+        const endTime = add(startTime, { hours: 1 }); // Assume 1-hour interview
+
+        // Create calendar events for each candidate
+        await Promise.all(
+            emailDrafts
+                .filter(draft => draft.candidateEmail)
+                .map(draft => createCalendarEvent({
+                    title: `Interview: ${draft.candidateName} for ${selectedJob.title}`,
+                    startTime: startTime.toISOString(),
+                    endTime: endTime.toISOString(),
+                    attendeeEmail: draft.candidateEmail!,
+                }))
+        );
+
+        setIsEmailDialogOpen(false);
     } catch (error) {
-       console.error("Error sending emails:", error);
-       toast({
-        variant: "destructive",
-        title: "Failed to Send Emails",
-        description: error instanceof Error ? error.message : "Could not send emails. Please check the server logs.",
-      });
+        console.error("Error sending emails or scheduling:", error);
+        toast({
+            variant: "destructive",
+            title: "Operation Failed",
+            description: error instanceof Error ? error.message : "Could not complete the process. Please check server logs.",
+        });
     } finally {
-      setIsSendingEmails(false);
+        setIsSendingEmails(false);
     }
+};
 
-  };
   
   const selectedCount = candidates.filter(c => c.selected).length;
 
