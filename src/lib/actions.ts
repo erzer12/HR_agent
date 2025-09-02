@@ -1,3 +1,4 @@
+
 // In src/lib/actions.ts
 
 "use server";
@@ -164,6 +165,21 @@ export async function deleteCandidate(jobId: string, candidateId: string) {
   const candidateRef = doc(db, "jobs", jobId, "candidates", candidateId);
   await deleteDoc(candidateRef);
 }
+
+export async function deleteAllCandidates(jobId: string) {
+  if (!jobId) throw new Error("Job ID is required.");
+
+  const batch = writeBatch(db);
+  const candidatesRef = collection(db, "jobs", jobId, "candidates");
+  const candidatesSnapshot = await getDocs(candidatesRef);
+
+  candidatesSnapshot.forEach((doc) => {
+    batch.delete(doc.ref);
+  });
+
+  await batch.commit();
+}
+
 
 // ---------------------------
 // Email Sending with Resend

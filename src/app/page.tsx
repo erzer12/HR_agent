@@ -8,7 +8,7 @@ import { db } from "@/lib/firebase";
 
 import type { ClientCandidate, Job } from "@/lib/types";
 import { draftPersonalizedConfirmationEmail } from "@/ai/flows/draft-personalized-confirmation-emails";
-import { createJobAndRankCandidates, updateJob, deleteJob, addResumesToJob, deleteCandidate, sendInterviewEmail, createCalendarEvent } from "@/lib/actions";
+import { createJobAndRankCandidates, updateJob, deleteJob, addResumesToJob, deleteCandidate, sendInterviewEmail, createCalendarEvent, deleteAllCandidates } from "@/lib/actions";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -28,13 +28,14 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 
 import { Sidebar, SidebarContent, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuItem, SidebarTrigger } from "@/components/ui/sidebar";
-import { Plus, Send, Loader2, FileText, Calendar as CalendarIcon, Briefcase, Upload, Edit, Clock } from "lucide-react";
+import { Plus, Send, Loader2, FileText, Calendar as CalendarIcon, Briefcase, Upload, Edit, Clock, Trash2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -223,6 +224,16 @@ export default function Home() {
       toast({ title: 'Candidate removed' });
     } catch (error) {
       toast({ variant: 'destructive', title: 'Failed to remove candidate', description: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  };
+
+  const handleDeleteAllCandidates = async () => {
+    if (!selectedJob) return;
+    try {
+      await deleteAllCandidates(selectedJob.id);
+      toast({ title: 'All candidates removed' });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Failed to remove candidates', description: error instanceof Error ? error.message : 'Unknown error' });
     }
   };
   
@@ -418,15 +429,39 @@ export default function Home() {
     return (
        <div className="space-y-6">
         <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-                <div className="space-y-1">
+            <CardHeader className="flex flex-row items-start justify-between">
+                <div className="space-y-1.5">
                     <CardTitle>Candidate Review</CardTitle>
                     <CardDescription>Found {candidates.length} candidates for: <span className="font-semibold text-primary">{selectedJob.title}</span></CardDescription>
                 </div>
-                 <Button variant="outline" onClick={() => startEditingJob(selectedJob)}>
-                    <Edit className="mr-2"/>
-                    Edit Job
-                </Button>
+                 <div className="flex gap-2">
+                    {candidates.length > 0 && (
+                      <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                              <Button variant="outline" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/50">
+                                  <Trash2 className="mr-2"/>
+                                  Remove All
+                              </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                              <AlertDialogHeader>
+                                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                      This will permanently remove all {candidates.length} candidates from this job. This action cannot be undone.
+                                  </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={handleDeleteAllCandidates} className="bg-destructive hover:bg-destructive/90">Delete All Candidates</AlertDialogAction>
+                              </AlertDialogFooter>
+                          </AlertDialogContent>
+                      </AlertDialog>
+                    )}
+                    <Button variant="outline" onClick={() => startEditingJob(selectedJob)}>
+                        <Edit className="mr-2"/>
+                        Edit Job
+                    </Button>
+                 </div>
             </CardHeader>
             <CardContent className="space-y-4">
                 {selectedJob.status === 'processing' && (
