@@ -57,7 +57,7 @@ const prompt = ai.definePrompt({
   Interviewer: {{{interviewerName}}}
   
   Generate a professional and friendly email with a clear subject line and body.
-  The body should be well-formatted with appropriate line breaks.`,
+  The body should be well-formatted with appropriate line breaks. Ensure the interview details are clearly listed.`,
 });
 
 const draftPersonalizedConfirmationEmailFlow = ai.defineFlow(

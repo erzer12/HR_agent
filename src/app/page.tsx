@@ -28,13 +28,17 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 
 import { Sidebar, SidebarContent, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuItem, SidebarTrigger } from "@/components/ui/sidebar";
-import { Plus, Send, Loader2, FileText, Calendar, Briefcase, Upload, Edit } from "lucide-react";
+import { Plus, Send, Loader2, FileText, Calendar as CalendarIcon, Briefcase, Upload, Edit, Clock } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 
 type EmailDraft = {
   candidateName: string;
@@ -59,6 +63,9 @@ export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false);
 
   // UI State
+  const [isSchedulingDialogOpen, setIsSchedulingDialogOpen] = useState(false);
+  const [interviewDate, setInterviewDate] = useState<Date | undefined>();
+  const [interviewTime, setInterviewTime] = useState("10:00");
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [isGeneratingEmails, setIsGeneratingEmails] = useState(false);
   const [emailDrafts, setEmailDrafts] = useState<EmailDraft[]>([]);
@@ -256,22 +263,25 @@ export default function Home() {
     setCandidates(prev => prev.map(c => c.id === id ? { ...c, selected } : c));
   };
 
-  const handleGenerateEmails = async () => {
+  const handleProceedToEmail = async () => {
     const selectedCandidates = candidates.filter(c => c.selected);
-    if (selectedCandidates.length === 0 || !selectedJob) return;
+    if (selectedCandidates.length === 0 || !selectedJob || !interviewDate) return;
 
+    setIsSchedulingDialogOpen(false);
     setIsEmailDialogOpen(true);
     setIsGeneratingEmails(true);
     setEmailDrafts([]);
 
     try {
       const drafts: EmailDraft[] = [];
+      const formattedDate = format(interviewDate, "PPP");
+
       for (const candidate of selectedCandidates) {
         const result = await draftPersonalizedConfirmationEmail({
           candidateName: candidate.candidateName,
           jobTitle: selectedJob.title,
-          interviewDate: "to be confirmed",
-          interviewTime: "to be confirmed",
+          interviewDate: formattedDate,
+          interviewTime: interviewTime,
           interviewerName: "the Hiring Manager",
           candidateEmail: candidate.candidateEmail || undefined,
         });
@@ -289,6 +299,7 @@ export default function Home() {
         title: "Email Generation Failed",
         description: "Could not draft emails for the selected candidates.",
       });
+      setIsEmailDialogOpen(false); // Close the email dialog on error
     } finally {
       setIsGeneratingEmails(false);
     }
@@ -317,7 +328,7 @@ export default function Home() {
               {!jobToEdit && (
                 <div className="space-y-2">
                   <Label htmlFor="resume-upload">Upload Resumes</Label>
-                  <Input id="resume-upload" type="file" multiple accept=".pdf" onChange={(e) => setFiles(e.target.files ? Array.from(e.target.files) : [])} className="h-11" />
+                  <Input id="resume-upload" type="file" multiple accept=".pdf,.doc,.docx,.txt" onChange={(e) => setFiles(e.target.files ? Array.from(e.target.files) : [])} className="h-11" />
                 </div>
               )}
                <div className="flex justify-between items-center pt-4">
@@ -388,7 +399,7 @@ export default function Home() {
                 <form onSubmit={handleAddResumes} className="space-y-4">
                      <div className="space-y-2">
                         <Label htmlFor="new-resume-upload">Upload Resumes</Label>
-                        <Input id="new-resume-upload" type="file" multiple accept=".pdf" onChange={(e) => setNewResumeFiles(e.target.files ? Array.from(e.target.files) : [])} className="h-11" />
+                        <Input id="new-resume-upload" type="file" multiple accept=".pdf,.doc,.docx,.txt" onChange={(e) => setNewResumeFiles(e.target.files ? Array.from(e.target.files) : [])} className="h-11" />
                     </div>
                      <div className="flex justify-end">
                         <Button type="submit" disabled={isAddingResumes || newResumeFiles.length === 0}>
@@ -406,10 +417,10 @@ export default function Home() {
                     <CardTitle>Next Steps</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <p>Selected {selectedCount} candidate(s). Proceed to the next step to draft interview emails.</p>
-                    <Button className="mt-4 bg-accent hover:bg-accent/90" disabled={selectedCount === 0} onClick={handleGenerateEmails}>
+                    <p>Selected {selectedCount} candidate(s). Proceed to the next step to schedule interviews and draft emails.</p>
+                    <Button className="mt-4 bg-accent hover:bg-accent/90" disabled={selectedCount === 0} onClick={() => setIsSchedulingDialogOpen(true)}>
                         <Send className="mr-2"/>
-                        Draft Emails for Selected Candidates
+                        Schedule & Draft Emails
                     </Button>
                 </CardContent>
             </Card>
@@ -417,7 +428,7 @@ export default function Home() {
 
         <Card>
             <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Calendar className="w-5 h-5 text-muted-foreground" /> Calendar</CardTitle>
+                <CardTitle className="flex items-center gap-2"><CalendarIcon className="w-5 h-5 text-muted-foreground" /> Calendar</CardTitle>
             </CardHeader>
             <CardContent>
                 <p className="text-muted-foreground">Interview scheduling and calendar integration will be available here.</p>
@@ -472,6 +483,62 @@ export default function Home() {
                 {renderContent()}
             </main>
         </SidebarInset>
+
+        <Dialog open={isSchedulingDialogOpen} onOpenChange={setIsSchedulingDialogOpen}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>Schedule Interview</DialogTitle>
+                    <DialogDescription>
+                        Select a date and time for the interview for the {selectedCount} selected candidate(s).
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="interview-date" className="text-right">
+                            Date
+                        </Label>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button
+                                variant={"outline"}
+                                className={cn(
+                                    "col-span-3 justify-start text-left font-normal",
+                                    !interviewDate && "text-muted-foreground"
+                                )}
+                                >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {interviewDate ? format(interviewDate, "PPP") : <span>Pick a date</span>}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                                <Calendar
+                                mode="single"
+                                selected={interviewDate}
+                                onSelect={setInterviewDate}
+                                initialFocus
+                                />
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="interview-time" className="text-right">
+                            Time
+                        </Label>
+                         <Input
+                            id="interview-time"
+                            type="time"
+                            value={interviewTime}
+                            onChange={(e) => setInterviewTime(e.target.value)}
+                            className="col-span-3"
+                        />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="ghost" onClick={() => setIsSchedulingDialogOpen(false)}>Cancel</Button>
+                    <Button onClick={handleProceedToEmail} disabled={!interviewDate || !interviewTime}>Proceed to Draft Email</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
         
         <EmailPreviewDialog
             isOpen={isEmailDialogOpen}
@@ -483,5 +550,3 @@ export default function Home() {
     </div>
   );
 }
-
-    
