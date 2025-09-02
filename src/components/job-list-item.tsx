@@ -24,8 +24,10 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+type JobWithDate = Omit<Job, 'createdAt'> & { createdAt: Date };
+
 interface JobListItemProps {
-  job: Job;
+  job: JobWithDate;
   isSelected: boolean;
   onSelect: () => void;
   onEdit: () => void;
@@ -51,7 +53,7 @@ export function JobListItem({ job, isSelected, onSelect, onEdit, onDelete }: Job
           {job.status === "failed" && <AlertTriangle className="w-4 h-4 text-destructive" />}
         </div>
         <p className="text-xs text-muted-foreground mt-1">
-          {job.createdAt ? formatDistanceToNow(new Date(job.createdAt), { addSuffix: true }) : '...'}
+          {job.createdAt ? formatDistanceToNow(job.createdAt, { addSuffix: true }) : '...'}
         </p>
       </button>
        <AlertDialog>

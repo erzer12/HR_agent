@@ -310,11 +310,14 @@ export default function Home() {
                 {selectedJob.status === 'processing' && (
                     <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="animate-spin" /> Analyzing resumes...</div>
                 )}
-                {selectedJob.status === 'completed' && candidates.map(candidate => (
+                {selectedJob.status === 'completed' && candidates.length > 0 && candidates.map(candidate => (
                     <CandidateCard key={candidate.id} candidate={candidate} onSelect={handleSelectCandidate} />
                 ))}
+                 {selectedJob.status === 'completed' && candidates.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">No candidates have been analyzed for this job yet.</div>
+                )}
                  {selectedJob.status === 'failed' && (
-                    <div className="text-destructive">Processing failed for this job.</div>
+                    <div className="text-destructive p-4 bg-destructive/10 rounded-md">Processing failed for this job. Please try creating a new job.</div>
                 )}
             </CardContent>
         </Card>
@@ -347,7 +350,7 @@ export default function Home() {
   }
 
   return (
-    <div className="flex">
+    <div className="flex h-full">
         <Sidebar>
             <SidebarHeader>
               <div className="flex items-center gap-2">
@@ -362,12 +365,12 @@ export default function Home() {
                 </div>
                 <ScrollArea className="h-[calc(100vh-120px)]">
                     <SidebarMenu>
-                        {jobs === null && Array.from({length: 3}).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+                        {jobs === null && Array.from({length: 3}).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}
                         {jobs?.map(job => (
                             <SidebarMenuItem key={job.id}>
                                 <JobListItem 
                                   job={job}
-                                  isSelected={selectedJob?.id === job.id}
+                                  isSelected={selectedJob?.id === job.id && !isCreatingOrEditingJob}
                                   onSelect={() => {
                                     setSelectedJob(job);
                                     setIsCreatingOrEditingJob(false);
@@ -387,7 +390,7 @@ export default function Home() {
                 <SidebarTrigger className="md:hidden" />
                 <h1 className="text-2xl font-bold tracking-tight font-headline">{isCreatingOrEditingJob ? (jobToEdit ? 'Edit Job' : 'Create Job') : (selectedJob?.title || "Dashboard")}</h1>
             </header>
-             <main className="flex-1 p-4 md:p-6 lg:p-8">
+             <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-auto">
                 {renderContent()}
             </main>
         </SidebarInset>
