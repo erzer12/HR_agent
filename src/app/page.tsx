@@ -35,11 +35,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 
 import { Sidebar, SidebarContent, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuItem, SidebarTrigger } from "@/components/ui/sidebar";
-import { Plus, Send, Loader2, FileText, Calendar as CalendarIcon, Briefcase, Upload, Edit, Clock, Trash2 } from "lucide-react";
+import { Plus, Send, Loader2, FileText, Calendar as CalendarIcon, Briefcase, Upload, Edit, Clock, Trash2, Link as LinkIcon } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { format, add } from "date-fns";
+import { getGoogleAuthUrl } from "@/lib/google-auth";
 
 type EmailDraft = {
   candidateName: string;
@@ -68,7 +69,6 @@ export default function Home() {
   const [isSchedulingDialogOpen, setIsSchedulingDialogOpen] = useState(false);
   const [interviewDate, setInterviewDate] = useState<Date | undefined>();
   const [interviewTime, setInterviewTime] = useState("10:00");
-  const [scheduledDates, setScheduledDates] = useState<Date[]>([]);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [isGeneratingEmails, setIsGeneratingEmails] = useState(false);
   const [emailDrafts, setEmailDrafts] = useState<EmailDraft[]>([]);
@@ -78,6 +78,7 @@ export default function Home() {
   const [newResumeFiles, setNewResumeFiles] = useState<File[]>([]);
   const [isAddingResumes, setIsAddingResumes] = useState(false);
   const [isSendingEmails, setIsSendingEmails] = useState(false);
+  const [isCalendarConnected, setIsCalendarConnected] = useState(false);
 
 
   // Fetch jobs from Firestore
@@ -139,6 +140,19 @@ export default function Home() {
 
     return () => unsubscribe();
   }, [selectedJob, toast]);
+
+  // Check for calendar connection status (e.g., from a cookie or local storage)
+  useEffect(() => {
+    // In a real app, you would check for a stored OAuth token.
+    // For this example, we'll check for a query parameter.
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('calendar') === 'connected') {
+      setIsCalendarConnected(true);
+      toast({ title: "Google Calendar Connected!", description: "You can now schedule interviews." });
+      // Clean up the URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [toast]);
 
 
   const handleCreateOrUpdateJob = async (e: React.FormEvent) => {
@@ -281,6 +295,11 @@ export default function Home() {
     const selectedCandidates = candidates.filter(c => c.selected);
     if (selectedCandidates.length === 0 || !selectedJob || !interviewDate) return;
 
+    if (!isCalendarConnected) {
+      toast({ variant: 'destructive', title: "Google Calendar not connected", description: "Please connect your calendar to schedule interviews."});
+      return;
+    }
+
     setIsSchedulingDialogOpen(false);
     setIsEmailDialogOpen(true);
     setIsGeneratingEmails(true);
@@ -336,14 +355,6 @@ export default function Home() {
         );
         toast({ title: 'Emails sent successfully!' });
 
-        // Add the date to the list of scheduled dates to be shown on the calendar
-        setScheduledDates(prev => {
-            if (prev.some(d => d.getTime() === interviewDate.getTime())) {
-                return prev;
-            }
-            return [...prev, interviewDate];
-        });
-
         // Parse time and combine with date
         const [hours, minutes] = interviewTime.split(':').map(Number);
         const startTime = add(interviewDate, { hours, minutes });
@@ -360,6 +371,8 @@ export default function Home() {
                     attendeeEmail: draft.candidateEmail!,
                 }))
         );
+        toast({ title: 'Calendar events scheduled!', description: "This is a placeholder. See server logs for details." });
+        
 
         setIsEmailDialogOpen(false);
     } catch (error) {
@@ -522,16 +535,22 @@ export default function Home() {
 
         <Card>
             <CardHeader>
-                <CardTitle className="flex items-center gap-2"><CalendarIcon className="w-5 h-5 text-muted-foreground" /> Calendar</CardTitle>
-                <CardDescription>View your upcoming interview schedule.</CardDescription>
+                <CardTitle className="flex items-center gap-2"><CalendarIcon className="w-5 h-5 text-muted-foreground" /> Google Calendar</CardTitle>
+                <CardDescription>Connect your Google Calendar to view and manage interview schedules.</CardDescription>
             </CardHeader>
             <CardContent>
-                <Calendar
-                    mode="multiple"
-                    selected={scheduledDates}
-                    onSelect={setScheduledDates}
-                    className="p-0"
-                />
+              {isCalendarConnected ? (
+                <div>
+                  <p className="text-green-600 font-medium">✓ Calendar Connected</p>
+                  <p className="text-muted-foreground mt-2 text-sm">Your scheduled interviews will appear here. This is a placeholder for the calendar view.</p>
+                  {/* A developer would replace this with a component that fetches and displays calendar events */}
+                </div>
+              ) : (
+                <Button onClick={() => window.location.href = getGoogleAuthUrl()}>
+                    <LinkIcon className="mr-2" />
+                    Connect to Google Calendar
+                </Button>
+              )}
             </CardContent>
         </Card>
        </div>
