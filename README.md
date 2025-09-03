@@ -1,3 +1,4 @@
+
 # ResumeRank Monorepo
 
 This project is structured as a monorepo with two main packages:
@@ -7,22 +8,11 @@ This project is structured as a monorepo with two main packages:
 
 ## Getting Started
 
-### 1. Frontend (Next.js)
+This project requires two separate processes to be running simultaneously in two different terminal windows.
 
-The frontend is a Next.js application. From the project root directory, run the following commands to start the UI development server:
+### 1. Backend Server (Python)
 
-```bash
-npm install
-npm run dev
-```
-
-The frontend will be available at `http://localhost:9002`. It is configured to send API requests to your Python backend, which it expects to be running on `http://localhost:8000`.
-
-### 2. Backend (Python)
-
-The backend is a Python application that you will build. Follow the detailed instructions in `backend/PYTHON_BACKEND_ROADMAP.md` to create the required API.
-
-To run the Python server (once you have developed it), you will typically run these commands from the root directory:
+First, start the Python backend server. From the project root directory, run the following commands:
 
 ```bash
 # Navigate to the backend directory
@@ -38,3 +28,20 @@ pip install -r requirements.txt
 # Run the FastAPI server
 uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
+You can verify the backend is running by opening `http://localhost:8000/api` in your browser. You should see `{"message":"ResumeRank API is running"}`.
+
+### 2. Frontend Server (Next.js)
+
+Once the backend is running, open a **new terminal window**. From the project root directory, run the following commands to start the UI development server:
+
+```bash
+# Install Node.js dependencies
+npm install
+
+# Run the Next.js development server
+npm run dev
+```
+
+The frontend will be available at `http://localhost:9002`. It is configured to send API requests to your Python backend at `http://localhost:8000`.
+
+    

@@ -1,10 +1,10 @@
+
 # backend/app.py
 
 from datetime import datetime, timedelta
 from typing import List
 
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException, BackgroundTasks, Request, Response
-from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from google_auth_oauthlib.flow import Flow
 
@@ -216,3 +216,5 @@ async def google_auth_callback(request: Request):
     db.store_user_tokens("placeholder_user_id", tokens)
     
     return RedirectResponse(url=f"{config.FRONTEND_URL}?calendar=connected")
+
+    
