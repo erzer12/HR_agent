@@ -7,8 +7,8 @@ import { collection, onSnapshot, query, orderBy, Timestamp } from "firebase/fire
 import { db } from "@/lib/firebase";
 
 import type { ClientCandidate, Job } from "@/lib/types";
-import { draftPersonalizedConfirmationEmail } from "@/ai/flows/draft-personalized-confirmation-emails";
-import { createJobAndRankCandidates, updateJob, deleteJob, addResumesToJob, deleteCandidate, sendInterviewEmail, createCalendarEvent, deleteAllCandidates, getGoogleAuthUrl } from "@/lib/actions";
+// import { draftPersonalizedConfirmationEmail } from "@/ai/flows/draft-personalized-confirmation-emails";
+// import { createJobAndRankCandidates, updateJob, deleteJob, addResumesToJob, deleteCandidate, sendInterviewEmail, createCalendarEvent, deleteAllCandidates, getGoogleAuthUrl } from "@/lib/actions";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -159,101 +159,34 @@ export default function Home() {
 
   const handleCreateOrUpdateJob = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!jobTitleForNewJob.trim() || !jobDescriptionForNewJob.trim()) {
-      toast({ variant: 'destructive', title: 'Title and description are required.' });
-      return;
-    }
-    
-    setIsProcessing(true);
-    try {
-      if (jobToEdit) { // Editing existing job
-        await updateJob(jobToEdit.id, { title: jobTitleForNewJob, jobDescription: jobDescriptionForNewJob });
-        toast({ title: "Job updated successfully!" });
-        const updatedJob = { ...jobToEdit, title: jobTitleForNewJob, jobDescription: jobDescriptionForNewJob };
-        setSelectedJob(updatedJob);
-         // Find the job in the list and update it
-        setJobs(prevJobs => {
-            if (!prevJobs) return null;
-            return prevJobs.map(j => j.id === updatedJob.id ? updatedJob : j);
-        });
-      } else { // Creating new job
-        const { jobId } = await createJobAndRankCandidates(jobTitleForNewJob, jobDescriptionForNewJob, files);
-        toast({ title: "Job created and resumes are being processed!" });
-         // The new job will be picked up by the snapshot listener, so we just need to select it
-         // This is a bit of a hack, ideally we'd get the new job back and select it
-        setTimeout(() => {
-            if (jobs && jobs.length > 0) {
-              const newJob = jobs.find(j => j.id === jobId);
-              if (newJob) setSelectedJob(newJob);
-            }
-        }, 1000);
-      }
-      resetJobForm();
-    } catch (error) {
-      console.error("Error creating/updating job:", error);
-      toast({
-        variant: "destructive",
-        title: "Operation Failed",
-        description: error instanceof Error ? error.message : "An unknown error occurred.",
-      });
-    } finally {
-      setIsProcessing(false);
-    }
+    // TODO: Call Python backend API
+    console.log("Creating or updating job. This should call the Python backend.");
+    toast({title: "Backend not connected", description: "This action should call the Python backend."})
   };
 
   const handleAddResumes = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedJob || newResumeFiles.length === 0) {
-      toast({ variant: 'destructive', title: 'Please select resume files.'});
-      return;
-    }
-    setIsAddingResumes(true);
-    try {
-      await addResumesToJob(selectedJob.id, newResumeFiles);
-      toast({ title: "Resumes added and are being processed!" });
-      setNewResumeFiles([]);
-    } catch (error) {
-       console.error("Error adding resumes:", error);
-      toast({
-        variant: "destructive",
-        title: "Failed to Add Resumes",
-        description: error instanceof Error ? error.message : "An unknown error occurred.",
-      });
-    } finally {
-        setIsAddingResumes(false);
-    }
+    // TODO: Call Python backend API
+    console.log("Adding resumes. This should call the Python backend.");
+    toast({title: "Backend not connected", description: "This action should call the Python backend."})
   };
 
   const handleDeleteJob = async (jobId: string) => {
-    try {
-      await deleteJob(jobId);
-      toast({ title: "Job deleted successfully" });
-      if (selectedJob?.id === jobId) {
-         setSelectedJob(jobs && jobs.length > 1 ? jobs.filter(j => j.id !== jobId)[0] : null);
-      }
-    } catch (error) {
-       toast({ variant: 'destructive', title: 'Failed to delete job', description: error instanceof Error ? error.message : 'Unknown error'});
-    }
+    // TODO: Call Python backend API
+    console.log("Deleting job. This should call the Python backend.");
+    toast({title: "Backend not connected", description: "This action should call the Python backend."})
   };
 
   const handleDeleteCandidate = async (candidateId: string) => {
-    if (!selectedJob) return;
-    try {
-      await deleteCandidate(selectedJob.id, candidateId);
-      toast({ title: 'Candidate removed' });
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Failed to remove candidate', description: error instanceof Error ? error.message : 'Unknown error' });
-    }
+    // TODO: Call Python backend API
+    console.log("Deleting candidate. This should call the Python backend.");
+    toast({title: "Backend not connected", description: "This action should call the Python backend."})
   };
 
   const handleDeleteAllCandidates = async () => {
-    if (!selectedJob) return;
-    try {
-      await deleteAllCandidates(selectedJob.id);
-      toast({ title: 'All candidates removed' });
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Failed to remove candidates', description: error instanceof Error ? error.message : 'Unknown error' });
-    }
+    // TODO: Call Python backend API
+    console.log("Deleting all candidates. This should call the Python backend.");
+    toast({title: "Backend not connected", description: "This action should call the Python backend."})
   };
   
   const startNewJob = () => {
@@ -311,26 +244,18 @@ export default function Home() {
     setEmailDrafts([]);
 
     try {
-      const drafts: EmailDraft[] = [];
-      const formattedDate = format(interviewDate, "PPP");
-
-      for (const candidate of selectedCandidates) {
-        const result = await draftPersonalizedConfirmationEmail({
-          candidateName: candidate.candidateName,
-          jobTitle: selectedJob.title,
-          interviewDate: formattedDate,
-          interviewTime: interviewTime,
-          interviewerName: "the Hiring Manager",
-          candidateEmail: candidate.candidateEmail || undefined,
-        });
-        drafts.push({
-          candidateName: candidate.candidateName,
-          candidateEmail: candidate.candidateEmail,
-          subject: result.emailSubject,
-          body: result.emailBody,
-        });
-        setEmailDrafts([...drafts]);
-      }
+      // TODO: Call Python backend to draft emails
+      console.log("Proceeding to email. This should call the Python backend to draft emails.");
+      toast({title: "Backend not connected", description: "This action should call the Python backend."});
+      // Mock drafts for UI
+       const formattedDate = format(interviewDate, "PPP");
+       const drafts = selectedCandidates.map(c => ({
+         candidateName: c.candidateName,
+         candidateEmail: c.candidateEmail,
+         subject: `Interview for ${selectedJob.title}`,
+         body: `Hi ${c.candidateName},\n\nThis is a placeholder email for your interview on ${formattedDate} at ${interviewTime}.\n\nGood luck!`,
+       }));
+       setEmailDrafts(drafts);
     } catch (error) {
       console.error("Error generating emails:", error);
       toast({
@@ -345,60 +270,18 @@ export default function Home() {
   };
 
   const handleSendEmails = async () => {
-    if (!selectedJob || emailDrafts.length === 0 || !interviewDate || !interviewTime) {
-        return;
-    }
-    setIsSendingEmails(true);
-    try {
-        // Send emails
-        await Promise.all(
-            emailDrafts
-                .filter(draft => draft.candidateEmail)
-                .map(draft => 
-                    sendInterviewEmail(draft.candidateEmail!, draft.subject, draft.body)
-                )
-        );
-        toast({ title: 'Emails sent successfully!' });
-
-        // Parse time and combine with date
-        const [hours, minutes] = interviewTime.split(':').map(Number);
-        const startTime = add(interviewDate, { hours, minutes });
-        const endTime = add(startTime, { hours: 1 }); // Assume 1-hour interview
-
-        // Create calendar events for each candidate
-        await Promise.all(
-            emailDrafts
-                .filter(draft => draft.candidateEmail)
-                .map(draft => createCalendarEvent({
-                    title: `Interview: ${draft.candidateName} for ${selectedJob.title}`,
-                    startTime: startTime.toISOString(),
-                    endTime: endTime.toISOString(),
-                    attendeeEmail: draft.candidateEmail!,
-                }))
-        );
-        toast({ title: 'Calendar events scheduled!', description: "This is a placeholder. See server logs for details." });
-
-        if (!scheduledDates.some(d => isSameDay(d, interviewDate))) {
-            setScheduledDates(prev => [...prev, interviewDate]);
-        }
-        
-        setIsEmailDialogOpen(false);
-    } catch (error) {
-        console.error("Error sending emails or scheduling:", error);
-        toast({
-            variant: "destructive",
-            title: "Operation Failed",
-            description: error instanceof Error ? error.message : "Could not complete the process. Please check server logs.",
-        });
-    } finally {
-        setIsSendingEmails(false);
-    }
-};
+    // TODO: Call Python backend to send emails and create calendar events
+    console.log("Sending emails. This should call the Python backend.");
+    toast({title: "Backend not connected", description: "This action should call the Python backend."})
+    setIsEmailDialogOpen(false);
+  };
 
   const handleConnectToCalendar = async () => {
     try {
-      const url = await getGoogleAuthUrl();
-      window.location.href = url;
+      // TODO: Call Python backend to get Google Auth URL
+      toast({title: "Backend not connected", description: "This action should call the Python backend."})
+      // const url = await getGoogleAuthUrl();
+      // window.location.href = url;
     } catch (error) {
       console.error("Error getting auth URL", error);
       toast({
@@ -701,5 +584,3 @@ export default function Home() {
     </div>
   );
 }
-
-    
