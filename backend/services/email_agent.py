@@ -1,4 +1,4 @@
-# backend/agents/email_agent.py
+# backend/services/email_agent.py
 
 from typing import Dict
 

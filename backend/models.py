@@ -21,10 +21,8 @@ class EmailSendRequest(BaseModel):
     jobId: str
     interviewDatetime: str
     candidateIds: List[str]
-    userGoogleTokens: Dict  # The stored OAuth tokens for the user.
-                           # IMPORTANT: In a real-world app, this is a security risk.
-                           # Tokens should be retrieved securely on the backend, not
-                           # passed from the client. This is simplified for the example.
+    # userGoogleTokens is removed from here for security.
+    # The backend will retrieve the tokens from Firestore.
 
 class DraftedEmail(BaseModel):
     """Model for a single drafted email to be returned to the frontend."""

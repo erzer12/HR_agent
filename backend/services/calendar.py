@@ -1,4 +1,4 @@
-# backend/agents/calendar.py
+# backend/services/calendar.py
 
 from typing import Dict
 from google.oauth2.credentials import Credentials

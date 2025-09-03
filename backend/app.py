@@ -8,10 +8,9 @@ from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from google_auth_oauthlib.flow import Flow
 
-# Import agents and services
-from agents import resume_processing, email_agent
-from services import firestore_client as db
-from agents import calendar
+# Import services
+from services import resume_processing, email_agent, calendar
+import services.firestore_client as db
 
 # Import Pydantic models and config
 from models import JobUpdate, EmailDraftRequest, EmailSendRequest, DraftedEmail, AuthURL
@@ -152,6 +151,14 @@ async def send_emails_and_create_events(request: EmailSendRequest):
     start_time = datetime.fromisoformat(request.interviewDatetime)
     end_time = start_time + timedelta(minutes=30)  # Assume 30-minute interviews
 
+    # This is a placeholder user_id. In a real app, you would get this
+    # from your authentication system (e.g., the logged-in user's ID).
+    user_id = "placeholder_user_id"
+    user_tokens = db.get_user_tokens(user_id)
+    if not user_tokens:
+        raise HTTPException(status_code=401, detail="User is not authenticated with Google or tokens are missing.")
+
+
     for candidate in candidates:
         # 1. Send Email (This is mocked - integrate a real service like SendGrid or Resend here)
         email_content = email_agent.draft_email(job, candidate, request.interviewDatetime)
@@ -165,8 +172,7 @@ async def send_emails_and_create_events(request: EmailSendRequest):
             "end_time": end_time.isoformat(),
             "attendees": [candidate['candidateEmail']], # In a real app, add the interviewer's email too
         }
-        # Note: A real implementation would fetch tokens securely, not pass them from the client
-        calendar.create_calendar_event(request.userGoogleTokens, event_details)
+        calendar.create_calendar_event(user_tokens, event_details)
 
     return {"message": "Emails sent and calendar events created successfully."}
 

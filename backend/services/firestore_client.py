@@ -2,14 +2,19 @@
 
 import firebase_admin
 from firebase_admin import credentials, firestore
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 # Initialize the Firebase Admin SDK.
 # It automatically uses the credentials from the GOOGLE_APPLICATION_CREDENTIALS env var.
+# Make sure you have set this environment variable to point to your service account key file.
 try:
     firebase_admin.get_app()
 except ValueError:
+    # In a production environment, you might use a different credential source,
+    # but for local development, this is standard.
+    # cred = credentials.Certificate("serviceAccountKey.json")
     firebase_admin.initialize_app()
+
 
 db = firestore.client()
 
@@ -78,9 +83,17 @@ def _delete_collection(coll_ref, batch_size: int):
 
 def store_user_tokens(user_id: str, tokens: Dict):
     """
-    Stores user's Google OAuth tokens.
+    Stores user's Google OAuth tokens in Firestore.
     IMPORTANT: In production, you MUST encrypt these tokens before storing them.
     """
-    # Using a placeholder user ID for this example. In a real app,
-    # this would be the authenticated user's unique ID.
     db.collection('users').document(user_id).set({'google_tokens': tokens}, merge=True)
+
+def get_user_tokens(user_id: str) -> Optional[Dict]:
+    """
+    Retrieves a user's stored Google OAuth tokens.
+    In production, you would decrypt the tokens after fetching them.
+    """
+    doc = db.collection('users').document(user_id).get()
+    if doc.exists:
+        return doc.to_dict().get('google_tokens')
+    return None
