@@ -26,6 +26,9 @@ cd backend
 # !! IMPORTANT !!
 # You must install the Python dependencies before starting the server.
 #
+# If the 'pip' command is not found, your environment may prompt you to install it.
+# Please do so before proceeding.
+#
 pip install -r requirements.txt
 
 #
