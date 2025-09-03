@@ -1,175 +1,212 @@
-# main.py in the roadmap, but app.py is also a common convention.
-# This will be the main entry point for your FastAPI application.
-# It will define all the API endpoints described in the roadmap.
+# backend/app.py
 
-from fastapi import FastAPI, UploadFile, File, Form, Body, HTTPException
-from typing import List, Dict, Any
-import uvicorn
+from datetime import datetime, timedelta
+from typing import List
 
-# Placeholder imports for your modules
-# from agents import resume_processing, email_agent
-# from services import firestore_client, calendar
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException, BackgroundTasks, Request, Response
+from fastapi.responses import RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
+from google_auth_oauthlib.flow import Flow
 
-app = FastAPI()
+# Import agents and services
+from agents import resume_processing, email_agent
+from services import firestore_client as db
+from agents import calendar
 
-# --- Job Management Endpoints ---
+# Import Pydantic models and config
+from models import JobUpdate, EmailDraftRequest, EmailSendRequest, DraftedEmail, AuthURL
+import config
 
-@app.post("/api/jobs")
-async def create_job(
+# --- FastAPI App Initialization ---
+app = FastAPI(
+    title="ResumeRank API",
+    description="Backend for the ResumeRank application.",
+    version="1.0.0"
+)
+
+# --- CORS Middleware ---
+# This allows the frontend (running on http://localhost:9002) to communicate with this backend.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[config.FRONTEND_URL],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Background Task Definition ---
+async def process_resumes_task(job_id: str, job_description: str, resumes: List[UploadFile]):
+    """Background task to read, process, and store resume data."""
+    try:
+        for resume in resumes:
+            content_bytes = await resume.read()
+            # Try decoding with utf-8, fallback to latin-1 for broader compatibility
+            try:
+                content = content_bytes.decode('utf-8')
+            except UnicodeDecodeError:
+                content = content_bytes.decode('latin-1')
+
+            candidate_data = resume_processing.process_resume(job_description, content)
+            db.add_candidate(job_id, candidate_data)
+
+        db.update_job_status(job_id, 'completed')
+    except Exception as e:
+        print(f"Error during background resume processing for job {job_id}: {e}")
+        db.update_job_status(job_id, 'failed')
+
+
+# --- API Endpoints ---
+
+@app.get("/api")
+def root():
+    return {"message": "ResumeRank API is running"}
+
+# === Job Management ===
+@app.post("/api/jobs", status_code=201)
+async def create_job_and_process_resumes(
+    background_tasks: BackgroundTasks,
     title: str = Form(...),
     jobDescription: str = Form(...),
     resumes: List[UploadFile] = File(...)
 ):
-    """
-    Creates a new job, processes uploaded resumes, and ranks candidates.
-    """
-    # 1. Create a new document in the `jobs` collection in Firestore with an initial `status` of 'processing'.
-    #    job_id = firestore_client.create_job_document(title, jobDescription)
-    job_id = "mock-new-job-id-123" # Replace with actual Firestore call
-
-    # 2. For each uploaded resume file, asynchronously call your `resume_processing.py` agent.
-    #    (Implementation detail: you might use background tasks in FastAPI)
-    print(f"Creating job '{title}' with {len(resumes)} resumes. Job ID: {job_id}")
-    for resume in resumes:
-        # content = await resume.read()
-        # resume_text = content.decode('utf-8')
-        # candidate_data = resume_processing.process_resume(jobDescription, resume_text)
-        # firestore_client.add_candidate(job_id, candidate_data)
-        print(f"  - Processing resume: {resume.filename}")
-
-
-    # 3. Once all resumes are processed, update the job document's `status` to 'completed'.
-    #    firestore_client.update_job_status(job_id, 'completed')
-    print(f"Finished processing. Job {job_id} status set to completed.")
-
+    if not resumes:
+        raise HTTPException(status_code=400, detail="No resume files provided.")
+    
+    job_id = db.create_job(title, jobDescription)
+    background_tasks.add_task(process_resumes_task, job_id, jobDescription, resumes)
     return {"jobId": job_id}
 
-@app.put("/api/jobs/{job_id}")
-async def update_job(job_id: str, job_update: Dict[str, Any]):
-    """
-    Updates an existing job's title or description.
-    """
-    # Logic to fetch the specified job document from Firestore and update its fields.
-    # firestore_client.update_job(job_id, job_update)
-    print(f"Updating job {job_id} with: {job_update}")
-    return {"status": "success", "jobId": job_id}
+@app.put("/api/jobs/{job_id}", status_code=200)
+async def update_job_details(job_id: str, job_update: JobUpdate):
+    update_data = job_update.model_dump(exclude_unset=True)
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update.")
+    db.update_job(job_id, update_data)
+    return {"message": f"Job {job_id} updated."}
 
-@app.post("/api/jobs/{job_id}/resumes")
-async def add_resumes_to_job(job_id: str, resumes: List[UploadFile] = File(...)):
-    """
-    Adds new resumes to an existing job.
-    """
-    # 1. Update the job's `status` to 'processing'.
-    #    firestore_client.update_job_status(job_id, 'processing')
+@app.post("/api/jobs/{job_id}/resumes", status_code=200)
+async def add_resumes_to_job(
+    job_id: str,
+    background_tasks: BackgroundTasks,
+    resumes: List[UploadFile] = File(...)
+):
+    job = db.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    if not resumes:
+        raise HTTPException(status_code=400, detail="No resume files provided.")
+    
+    db.update_job_status(job_id, 'processing')
+    background_tasks.add_task(process_resumes_task, job_id, job['jobDescription'], resumes)
+    return {"message": "Resumes are being processed and added to the job."}
 
-    # 2. Perform resume processing and candidate creation logic.
-    print(f"Adding {len(resumes)} resumes to job {job_id}")
-    # ... same processing logic as create_job ...
-
-    # 3. Set the job's `status` back to 'completed'.
-    #    firestore_client.update_job_status(job_id, 'completed')
-    return {"status": "success"}
-
-@app.delete("/api/jobs/{job_id}")
+@app.delete("/api/jobs/{job_id}", status_code=204)
 async def delete_job(job_id: str):
-    """
-    Deletes a job and all its associated candidates.
-    """
-    # Logic to delete the job document and recursively delete its `candidates` subcollection.
-    # firestore_client.delete_job(job_id)
-    print(f"Deleting job {job_id}")
-    return {"status": "success"}
+    db.delete_job_and_candidates(job_id)
+    return Response(status_code=204)
 
-# --- Candidate Management Endpoints ---
 
-@app.delete("/api/jobs/{job_id}/candidates/{candidate_id}")
-async def delete_candidate(job_id: str, candidate_id: str):
-    """
-    Deletes a single candidate.
-    """
-    # firestore_client.delete_candidate(job_id, candidate_id)
-    print(f"Deleting candidate {candidate_id} from job {job_id}")
-    return {"status": "success"}
+# === Candidate Management ===
+@app.delete("/api/jobs/{job_id}/candidates/{candidate_id}", status_code=204)
+async def delete_single_candidate(job_id: str, candidate_id: str):
+    db.delete_candidate(job_id, candidate_id)
+    return Response(status_code=204)
 
-@app.delete("/api/jobs/{job_id}/candidates")
-async def delete_all_candidates(job_id: str):
-    """
-    Deletes all candidates for a specific job.
-    """
-    # firestore_client.delete_all_candidates(job_id)
-    print(f"Deleting all candidates from job {job_id}")
-    return {"status": "success"}
+@app.delete("/api/jobs/{job_id}/candidates", status_code=204)
+async def delete_all_job_candidates(job_id: str):
+    db.delete_all_candidates(job_id)
+    return Response(status_code=204)
 
-# --- Email & Scheduling Endpoints ---
 
-@app.post("/api/emails/draft")
-async def draft_emails(payload: Dict[str, Any] = Body(...)):
-    """
-    Drafts personalized emails for a list of selected candidates.
-    """
-    job_id = payload.get('jobId')
-    candidate_ids = payload.get('candidateIds')
-    interview_datetime = payload.get('interviewDatetime')
+# === Email & Scheduling ===
+@app.post("/api/emails/draft", response_model=List[DraftedEmail])
+async def draft_emails_for_candidates(request: EmailDraftRequest):
+    job = db.get_job(request.jobId)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    
+    candidates = db.get_candidates(request.jobId, request.candidateIds)
+    if not candidates:
+        raise HTTPException(status_code=404, detail="No specified candidates found.")
 
-    # 1. Fetch job and candidate details from Firestore.
-    #    job_details = firestore_client.get_job(job_id)
-    #    candidates = firestore_client.get_candidates(job_id, candidate_ids)
-    print(f"Drafting emails for job {job_id} for candidates: {candidate_ids}")
-
-    # 2. For each candidate, call `email_agent.py` to generate a personalized email body.
     drafts = []
-    # for candidate in candidates:
-    #     draft = email_agent.draft_email(job_details, candidate, interview_datetime)
-    #     drafts.append(draft)
+    for candidate in candidates:
+        email_content = email_agent.draft_email(job, candidate, request.interviewDatetime)
+        drafts.append(DraftedEmail(
+            candidateName=candidate.get("candidateName"),
+            candidateEmail=candidate.get("candidateEmail"),
+            **email_content
+        ))
+    return drafts
 
-    # This is mock data. Your implementation should generate this dynamically.
-    mock_drafts = [
-        { "candidateName": "Alice Wonder", "candidateEmail": "alice@example.com", "subject": "Interview for Senior Engineer", "body": "Dear Alice,\n\nWe were impressed with your resume..." },
-        { "candidateName": "Bob Builder", "candidateEmail": "bob@example.com", "subject": "Interview for Senior Engineer", "body": "Dear Bob,\n\nWe were impressed with your resume..." }
-    ]
-    return mock_drafts
+@app.post("/api/emails/send", status_code=200)
+async def send_emails_and_create_events(request: EmailSendRequest):
+    job = db.get_job(request.jobId)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    
+    candidates = db.get_candidates(request.jobId, request.candidateIds)
+    if not candidates:
+        raise HTTPException(status_code=404, detail="No specified candidates found.")
 
-@app.post("/api/emails/send")
-async def send_emails(payload: Dict[str, Any] = Body(...)):
-    """
-    Sends the drafted emails and creates Google Calendar events.
-    """
-    # 1. For each candidate:
-    #    - Call `email_agent.py` to get the final email content.
-    #    - Use an email service (e.g., Resend, SendGrid) to send the email.
-    #    - Call your `calendar.py` module to create a Google Calendar event.
-    print(f"Sending emails and creating calendar events for job {payload.get('jobId')}")
-    return {"status": "success"}
+    start_time = datetime.fromisoformat(request.interviewDatetime)
+    end_time = start_time + timedelta(minutes=30)  # Assume 30-minute interviews
 
-# --- Google Authentication Endpoints ---
+    for candidate in candidates:
+        # 1. Send Email (This is mocked - integrate a real service like SendGrid or Resend here)
+        email_content = email_agent.draft_email(job, candidate, request.interviewDatetime)
+        print(f"SIMULATING SENDING EMAIL TO: {candidate['candidateEmail']} with subject: {email_content['subject']}")
 
-@app.get("/api/auth/google")
-async def get_google_auth_url():
-    """
-    Generates and returns the Google OAuth2 consent screen URL.
-    """
-    # Logic to use `google-auth-oauthlib` to create the authorization URL.
-    # url = calendar.get_google_auth_url()
-    mock_url = "https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=YOUR_CLIENT_ID.apps.googleusercontent.com&redirect_uri=http://localhost:8000/api/auth/google/callback&scope=https://www.googleapis.com/auth/calendar.events&access_type=offline&prompt=consent"
-    return {"url": mock_url}
+        # 2. Create Google Calendar Event
+        event_details = {
+            "summary": f"Interview: {job['title']} with {candidate['candidateName']}",
+            "description": f"Interview for the {job['title']} position.",
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "attendees": [candidate['candidateEmail']], # In a real app, add the interviewer's email too
+        }
+        # Note: A real implementation would fetch tokens securely, not pass them from the client
+        calendar.create_calendar_event(request.userGoogleTokens, event_details)
+
+    return {"message": "Emails sent and calendar events created successfully."}
+
+
+# === Google Authentication ===
+def get_google_flow():
+    """Helper to create a Google OAuth Flow instance."""
+    # This requires a client_secret.json file from Google Cloud Console
+    return Flow.from_client_secrets_file(
+        "client_secret.json", 
+        scopes=config.GOOGLE_API_SCOPES,
+        redirect_uri=config.GOOGLE_REDIRECT_URI
+    )
+
+@app.get("/api/auth/google", response_model=AuthURL)
+async def google_auth():
+    flow = get_google_flow()
+    auth_url, _ = flow.authorization_url(
+        access_type='offline', 
+        prompt='consent' # Forces the refresh token to be sent every time
+    )
+    return {"url": auth_url}
 
 @app.get("/api/auth/google/callback")
-async def handle_google_auth_callback(code: str):
-    """
-    Handles the callback from Google after the user grants permission.
-    """
-    # 1. Exchange the `code` for an access token and a refresh token.
-    #    credentials = calendar.exchange_code_for_credentials(code)
-    # 2. Securely store these tokens in Firestore, associated with the user.
-    #    firestore_client.store_user_credentials(user_id, credentials)
-    print(f"Received Google auth code: {code}")
-    # In a real app, you would redirect the user back to the frontend.
-    # from fastapi.responses import RedirectResponse
-    # return RedirectResponse(url="http://localhost:9002?calendar=connected")
-    return {"status": "success", "message": "Authentication successful. Redirecting..."}
+async def google_auth_callback(request: Request):
+    flow = get_google_flow()
+    flow.fetch_token(authorization_response=str(request.url))
+    creds = flow.credentials
 
-if __name__ == "__main__":
-    # Note: Running this directly is for development.
-    # For production, use a WSGI server like Gunicorn or Uvicorn directly.
-    # Example: uvicorn app:app --host 0.0.0.0 --port 8000 --reload
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    tokens = {
+        'token': creds.token,
+        'refresh_token': creds.refresh_token,
+        'token_uri': creds.token_uri,
+        'client_id': creds.client_id,
+        'client_secret': creds.client_secret,
+        'scopes': creds.scopes
+    }
+    
+    # In a real app, you would associate these tokens with a logged-in user's ID
+    # For this example, we use a placeholder ID and store the tokens.
+    db.store_user_tokens("placeholder_user_id", tokens)
+    
+    return RedirectResponse(url=f"{config.FRONTEND_URL}?calendar=connected")

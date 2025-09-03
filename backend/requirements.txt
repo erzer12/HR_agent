@@ -1,10 +1,17 @@
+# Web Framework and Server
 fastapi
-uvicorn
-python-dotenv
-google-cloud-firestore
-google-auth-oauthlib
+uvicorn[standard]
+
+# Data validation (used by FastAPI)
+pydantic
+
+# For multipart/form-data (file uploads)
+python-multipart
+
+# Google Cloud & Firebase
+firebase-admin
 google-api-python-client
-# Add your preferred LLM library, e.g.:
-# openai
-# langchain
-# crewai
+google-auth-oauthlib
+
+# For loading environment variables from a .env file
+python-dotenv
