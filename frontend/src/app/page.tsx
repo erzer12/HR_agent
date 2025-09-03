@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -158,8 +157,15 @@ export default function Home() {
   }, [toast]);
 
 
-  const apiFetch = async (url: string, options?: RequestInit) => {
+  const apiFetch = async (url: string, options: RequestInit = {}) => {
     try {
+        // Ensure headers object exists
+        if (!options.headers) {
+            options.headers = {};
+        }
+        // Add the CORS header to every request
+        (options.headers as Record<string, string>)['Access-Control-Allow-Origin'] = '*';
+        
         const response = await fetch(`${PYTHON_API_BASE_URL}${url}`, options);
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ detail: response.statusText }));
