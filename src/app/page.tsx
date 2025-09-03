@@ -7,8 +7,6 @@ import { collection, onSnapshot, query, orderBy, Timestamp } from "firebase/fire
 import { db } from "@/lib/firebase";
 
 import type { ClientCandidate, Job } from "@/lib/types";
-// import { draftPersonalizedConfirmationEmail } from "@/ai/flows/draft-personalized-confirmation-emails";
-// import { createJobAndRankCandidates, updateJob, deleteJob, addResumesToJob, deleteCandidate, sendInterviewEmail, createCalendarEvent, deleteAllCandidates, getGoogleAuthUrl } from "@/lib/actions";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -28,7 +26,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -39,8 +36,10 @@ import { Plus, Send, Loader2, FileText, Calendar as CalendarIcon, Briefcase, Upl
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { format, add, isSameDay } from "date-fns";
+import { format } from "date-fns";
 
+
+const PYTHON_API_BASE_URL = "http://localhost:8000";
 
 type EmailDraft = {
   candidateName: string;
@@ -145,48 +144,127 @@ export default function Home() {
   // Check for calendar connection status (e.g., from a cookie or local storage)
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const calendarConnected = document.cookie.includes('google_calendar_connected=true');
-
-    if (calendarConnected || urlParams.get('calendar') === 'connected') {
+    if (urlParams.get('calendar') === 'connected') {
       setIsCalendarConnected(true);
-      if (urlParams.get('calendar') === 'connected') {
-        toast({ title: "Google Calendar Connected!", description: "You can now schedule interviews." });
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
+      toast({ title: "Google Calendar Connected!", description: "You can now schedule interviews." });
+      // Set a cookie to persist the connected state
+      document.cookie = "google_calendar_connected=true; path=/; max-age=31536000"; // Expires in 1 year
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (document.cookie.includes('google_calendar_connected=true')) {
+        setIsCalendarConnected(true);
     }
   }, [toast]);
 
 
+  const apiFetch = async (url: string, options?: RequestInit) => {
+    try {
+        const response = await fetch(`${PYTHON_API_BASE_URL}${url}`, options);
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+            throw new Error(errorData.detail || 'An unknown API error occurred');
+        }
+        if (response.status === 204) { // No Content
+            return null;
+        }
+        return response.json();
+    } catch (error: any) {
+        console.error(`API Error fetching ${url}:`, error);
+        toast({
+            variant: "destructive",
+            title: "API Error",
+            description: error.message || "Could not connect to the backend server.",
+        });
+        throw error;
+    }
+  };
+
   const handleCreateOrUpdateJob = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Call Python backend API
-    console.log("Creating or updating job. This should call the Python backend.");
-    toast({title: "Backend not connected", description: "This action should call the Python backend."})
+    setIsProcessing(true);
+
+    try {
+        if (jobToEdit) { // This is an update
+            await apiFetch(`/api/jobs/${jobToEdit.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: jobTitleForNewJob,
+                    jobDescription: jobDescriptionForNewJob
+                }),
+            });
+            toast({ title: "Job Updated", description: "The job details have been saved." });
+        } else { // This is a new job
+            const formData = new FormData();
+            formData.append('title', jobTitleForNewJob);
+            formData.append('jobDescription', jobDescriptionForNewJob);
+            files.forEach(file => formData.append('resumes', file));
+
+            const data = await apiFetch('/api/jobs', {
+                method: 'POST',
+                body: formData,
+            });
+            toast({ title: "Job Created!", description: `Job ID ${data.jobId} is now being processed.` });
+        }
+        resetJobForm();
+    } catch (error) {
+        // Error toast is handled by apiFetch
+    } finally {
+        setIsProcessing(false);
+    }
   };
 
   const handleAddResumes = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Call Python backend API
-    console.log("Adding resumes. This should call the Python backend.");
-    toast({title: "Backend not connected", description: "This action should call the Python backend."})
+    if (!selectedJob || newResumeFiles.length === 0) return;
+
+    setIsAddingResumes(true);
+    const formData = new FormData();
+    newResumeFiles.forEach(file => formData.append('resumes', file));
+
+    try {
+        await apiFetch(`/api/jobs/${selectedJob.id}/resumes`, {
+            method: 'POST',
+            body: formData,
+        });
+        toast({ title: "Resumes Added", description: "New resumes are being analyzed." });
+        setNewResumeFiles([]);
+    } catch (error) {
+       // Error toast handled by apiFetch
+    } finally {
+        setIsAddingResumes(false);
+    }
   };
 
   const handleDeleteJob = async (jobId: string) => {
-    // TODO: Call Python backend API
-    console.log("Deleting job. This should call the Python backend.");
-    toast({title: "Backend not connected", description: "This action should call the Python backend."})
+    try {
+        await apiFetch(`/api/jobs/${jobId}`, { method: 'DELETE' });
+        toast({ title: "Job Deleted", description: "The job and all its candidates have been removed." });
+        if (selectedJob?.id === jobId) {
+            setSelectedJob(jobs && jobs.length > 1 ? jobs.filter(j => j.id !== jobId)[0] : null);
+        }
+    } catch (error) {
+        // Error toast handled by apiFetch
+    }
   };
 
   const handleDeleteCandidate = async (candidateId: string) => {
-    // TODO: Call Python backend API
-    console.log("Deleting candidate. This should call the Python backend.");
-    toast({title: "Backend not connected", description: "This action should call the Python backend."})
+     if (!selectedJob) return;
+    try {
+        await apiFetch(`/api/jobs/${selectedJob.id}/candidates/${candidateId}`, { method: 'DELETE' });
+        toast({ title: "Candidate Removed" });
+    } catch (error) {
+        // Error toast handled by apiFetch
+    }
   };
 
   const handleDeleteAllCandidates = async () => {
-    // TODO: Call Python backend API
-    console.log("Deleting all candidates. This should call the Python backend.");
-    toast({title: "Backend not connected", description: "This action should call the Python backend."})
+    if (!selectedJob) return;
+    try {
+        await apiFetch(`/api/jobs/${selectedJob.id}/candidates`, { method: 'DELETE' });
+        toast({ title: "All Candidates Removed", description: "All candidates for this job have been deleted." });
+    } catch (error) {
+        // Error toast handled by apiFetch
+    }
   };
   
   const startNewJob = () => {
@@ -243,52 +321,63 @@ export default function Home() {
     setIsGeneratingEmails(true);
     setEmailDrafts([]);
 
+    const fullInterviewDate = new Date(interviewDate);
+    const [hours, minutes] = interviewTime.split(':').map(Number);
+    fullInterviewDate.setHours(hours, minutes);
+
     try {
-      // TODO: Call Python backend to draft emails
-      console.log("Proceeding to email. This should call the Python backend to draft emails.");
-      toast({title: "Backend not connected", description: "This action should call the Python backend."});
-      // Mock drafts for UI
-       const formattedDate = format(interviewDate, "PPP");
-       const drafts = selectedCandidates.map(c => ({
-         candidateName: c.candidateName,
-         candidateEmail: c.candidateEmail,
-         subject: `Interview for ${selectedJob.title}`,
-         body: `Hi ${c.candidateName},\n\nThis is a placeholder email for your interview on ${formattedDate} at ${interviewTime}.\n\nGood luck!`,
-       }));
-       setEmailDrafts(drafts);
+        const drafts = await apiFetch(`/api/emails/draft`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jobId: selectedJob.id,
+                interviewDatetime: fullInterviewDate.toISOString(),
+                candidateIds: selectedCandidates.map(c => c.id),
+            }),
+        });
+        setEmailDrafts(drafts);
     } catch (error) {
-      console.error("Error generating emails:", error);
-      toast({
-        variant: "destructive",
-        title: "Email Generation Failed",
-        description: "Could not draft emails for the selected candidates.",
-      });
-      setIsEmailDialogOpen(false); // Close the email dialog on error
+      setIsEmailDialogOpen(false);
     } finally {
       setIsGeneratingEmails(false);
     }
   };
 
   const handleSendEmails = async () => {
-    // TODO: Call Python backend to send emails and create calendar events
-    console.log("Sending emails. This should call the Python backend.");
-    toast({title: "Backend not connected", description: "This action should call the Python backend."})
-    setIsEmailDialogOpen(false);
+    const selectedCandidates = candidates.filter(c => c.selected);
+    if (selectedCandidates.length === 0 || !selectedJob || !interviewDate) return;
+
+    setIsSendingEmails(true);
+
+    const fullInterviewDate = new Date(interviewDate);
+    const [hours, minutes] = interviewTime.split(':').map(Number);
+    fullInterviewDate.setHours(hours, minutes);
+
+    try {
+        await apiFetch(`/api/emails/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jobId: selectedJob.id,
+                interviewDatetime: fullInterviewDate.toISOString(),
+                candidateIds: selectedCandidates.map(c => c.id),
+            }),
+        });
+        toast({ title: "Emails Sent!", description: "The interview confirmations are on their way." });
+        setIsEmailDialogOpen(false);
+    } catch (error) {
+        // Error toast handled by apiFetch
+    } finally {
+        setIsSendingEmails(false);
+    }
   };
 
   const handleConnectToCalendar = async () => {
     try {
-      // TODO: Call Python backend to get Google Auth URL
-      toast({title: "Backend not connected", description: "This action should call the Python backend."})
-      // const url = await getGoogleAuthUrl();
-      // window.location.href = url;
+        const data = await apiFetch('/api/auth/google');
+        window.location.href = data.url;
     } catch (error) {
-      console.error("Error getting auth URL", error);
-      toast({
-        variant: "destructive",
-        title: "Could not connect to Google",
-        description: "Failed to generate the authentication URL. Please check the server logs."
-      })
+        // Error toast handled by apiFetch
     }
   }
 
@@ -307,16 +396,16 @@ export default function Home() {
             <form onSubmit={handleCreateOrUpdateJob} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="job-title">Role Title</Label>
-                <Input id="job-title" placeholder="e.g., Senior Frontend Engineer" value={jobTitleForNewJob} onChange={e => setJobTitleForNewJob(e.target.value)} />
+                <Input id="job-title" placeholder="e.g., Senior Frontend Engineer" value={jobTitleForNewJob} onChange={e => setJobTitleForNewJob(e.target.value)} required />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="job-description">Job Description</Label>
-                <Textarea id="job-description" placeholder="Paste the full job description here..." value={jobDescriptionForNewJob} onChange={e => setJobDescriptionForNewJob(e.target.value)} className="min-h-[150px]" />
+                <Textarea id="job-description" placeholder="Paste the full job description here..." value={jobDescriptionForNewJob} onChange={e => setJobDescriptionForNewJob(e.target.value)} className="min-h-[150px]" required />
               </div>
               {!jobToEdit && (
                 <div className="space-y-2">
                   <Label htmlFor="resume-upload">Upload Resumes</Label>
-                  <Input id="resume-upload" type="file" multiple accept=".pdf,.doc,.docx,.txt" onChange={(e) => setFiles(e.target.files ? Array.from(e.target.files) : [])} className="h-11" />
+                  <Input id="resume-upload" type="file" multiple accept=".pdf,.doc,.docx,.txt" onChange={(e) => setFiles(e.target.files ? Array.from(e.target.files) : [])} className="h-11" required />
                 </div>
               )}
                <div className="flex justify-between items-center pt-4">
@@ -584,3 +673,5 @@ export default function Home() {
     </div>
   );
 }
+
+    
