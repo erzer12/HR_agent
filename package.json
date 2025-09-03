@@ -1,12 +1,23 @@
+
 {
   "name": "resumerank",
   "version": "0.1.0",
   "private": true,
   "scripts": {
+<<<<<<< HEAD
     "dev": "next dev -p 9002 frontend",
     "build": "next build frontend",
     "start": "next start -p 9002 frontend",
     "lint": "next lint frontend"
+=======
+    "dev": "next dev --turbopack -p 9002",
+    "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
+    "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+>>>>>>> 51e23ed (feat:Next.js frontend and Python backend)
   },
   "dependencies": {
     "@hookform/resolvers": "^4.1.3",

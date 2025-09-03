@@ -7,6 +7,10 @@ import { collection, onSnapshot, query, orderBy, Timestamp } from "firebase/fire
 import { db } from "@/lib/firebase";
 
 import type { ClientCandidate, Job } from "@/lib/types";
+<<<<<<< HEAD:frontend/src/app/page.tsx
+=======
+
+>>>>>>> 51e23ed (feat:Next.js frontend and Python backend):src/app/page.tsx
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -33,6 +37,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 
 import { Sidebar, SidebarContent, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuItem, SidebarTrigger } from "@/components/ui/sidebar";
+<<<<<<< HEAD:frontend/src/app/page.tsx
 import { Plus, Send, Loader2, FileText, Calendar as CalendarIcon, Briefcase, Upload, Edit, Clock, Trash2, Link as LinkIcon } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -41,6 +46,14 @@ import { format } from "date-fns";
 
 
 const PYTHON_API_BASE_URL = "http://localhost:8000";
+=======
+import { Plus, Send, Loader2, FileText, Calendar as CalendarIcon, Briefcase, Upload, Edit, Clock, Trash2, Link as LinkIcon, Check } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+import { format, add, isSameDay } from "date-fns";
+
+>>>>>>> 51e23ed (feat:Next.js frontend and Python backend):src/app/page.tsx
 
 type EmailDraft = {
   candidateName: string;
@@ -65,6 +78,7 @@ export default function Home() {
   const [candidates, setCandidates] = useState<ClientCandidate[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
 
+<<<<<<< HEAD:frontend/src/app/page.tsx
   // UI State
   const [isSchedulingDialogOpen, setIsSchedulingDialogOpen] = useState(false);
   const [interviewDate, setInterviewDate] = useState<Date | undefined>();
@@ -80,6 +94,10 @@ export default function Home() {
   const [isSendingEmails, setIsSendingEmails] = useState(false);
   const [isCalendarConnected, setIsCalendarConnected] = useState(false);
   const [scheduledDates, setScheduledDates] = useState<Date[]>([]);
+=======
+  const [isSendingEmails, setIsSendingEmails] = useState(false);
+  const [isCalendarConnected, setIsCalendarConnected] = useState(false);
+>>>>>>> 51e23ed (feat:Next.js frontend and Python backend):src/app/page.tsx
 
 
   // Fetch jobs from Firestore
@@ -145,6 +163,7 @@ export default function Home() {
   // Check for calendar connection status (e.g., from a cookie or local storage)
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
+<<<<<<< HEAD:frontend/src/app/page.tsx
     if (urlParams.get('calendar') === 'connected') {
       setIsCalendarConnected(true);
       toast({ title: "Google Calendar Connected!", description: "You can now schedule interviews." });
@@ -178,12 +197,26 @@ export default function Home() {
         throw error;
     }
   };
+=======
+    const calendarConnected = document.cookie.includes('google_calendar_connected=true');
+
+    if (calendarConnected || urlParams.get('calendar') === 'connected') {
+      setIsCalendarConnected(true);
+      if (urlParams.get('calendar') === 'connected') {
+        toast({ title: "Google Calendar Connected!", description: "You can now schedule interviews." });
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }, [toast]);
+
+>>>>>>> 51e23ed (feat:Next.js frontend and Python backend):src/app/page.tsx
 
   const handleCreateOrUpdateJob = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsProcessing(true);
 
     try {
+<<<<<<< HEAD:frontend/src/app/page.tsx
         if (jobToEdit) { // This is an update
             await apiFetch(`/api/jobs/${jobToEdit.id}`, {
                 method: 'PUT',
@@ -207,6 +240,37 @@ export default function Home() {
             toast({ title: "Job Created!", description: `Job ID ${data.jobId} is now being processed.` });
         }
         resetJobForm();
+=======
+      if (jobToEdit) { // Editing existing job
+        // TODO: Implement a PUT /jobs/{job_id} endpoint in Python for updating jobs.
+        toast({ title: "Editing not yet implemented in the new backend." });
+        console.warn("Update job functionality needs to be migrated to a Python endpoint.");
+        resetJobForm();
+      } else { // Creating new job
+        const formData = new FormData();
+        formData.append('title', jobTitleForNewJob);
+        formData.append('jobDescription', jobDescriptionForNewJob);
+        files.forEach(file => {
+            formData.append('resumeFiles', file);
+        });
+
+        const response = await fetch('http://localhost:8000/jobs', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to create job.');
+        }
+        
+        const result = await response.json();
+        toast({ title: "Job created successfully!", description: "Resumes are now being analyzed." });
+        
+        // The existing snapshot listener will handle UI updates.
+        resetJobForm();
+      }
+>>>>>>> 51e23ed (feat:Next.js frontend and Python backend):src/app/page.tsx
     } catch (error) {
         // Error toast is handled by apiFetch
     } finally {
@@ -238,11 +302,31 @@ export default function Home() {
 
   const handleDeleteJob = async (jobId: string) => {
     try {
+<<<<<<< HEAD:frontend/src/app/page.tsx
         await apiFetch(`/api/jobs/${jobId}`, { method: 'DELETE' });
         toast({ title: "Job Deleted", description: "The job and all its candidates have been removed." });
         if (selectedJob?.id === jobId) {
             setSelectedJob(jobs && jobs.length > 1 ? jobs.filter(j => j.id !== jobId)[0] : null);
         }
+=======
+      const response = await fetch(`http://localhost:8000/jobs/${jobId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        // Try to get more specific error from backend
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.detail || 'Failed to delete job.');
+      }
+
+      toast({ title: "Job deleted successfully" });
+      // The UI will update via the snapshot listener.
+      // We just need to handle the case where the currently selected job is the one being deleted.
+      if (selectedJob?.id === jobId) {
+         setSelectedJob(jobs && jobs.length > 1 ? jobs.filter(j => j.id !== jobId)[0] : null);
+      }
+
+>>>>>>> 51e23ed (feat:Next.js frontend and Python backend):src/app/page.tsx
     } catch (error) {
         // Error toast handled by apiFetch
     }
@@ -265,6 +349,16 @@ export default function Home() {
         toast({ title: "All Candidates Removed", description: "All candidates for this job have been deleted." });
     } catch (error) {
         // Error toast handled by apiFetch
+    }
+  };
+
+  const handleDeleteAllCandidates = async () => {
+    if (!selectedJob) return;
+    try {
+      await deleteAllCandidates(selectedJob.id);
+      toast({ title: 'All candidates removed' });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Failed to remove candidates', description: error instanceof Error ? error.message : 'Unknown error' });
     }
   };
   
@@ -308,8 +402,9 @@ export default function Home() {
     setCandidates(prev => prev.map(c => c.id === id ? { ...c, selected } : c));
   };
 
-  const handleProceedToEmail = async () => {
+  const handleSelectCandidates = async () => {
     const selectedCandidates = candidates.filter(c => c.selected);
+<<<<<<< HEAD:frontend/src/app/page.tsx
     if (selectedCandidates.length === 0 || !selectedJob || !interviewDate) return;
 
     if (!isCalendarConnected) {
@@ -339,14 +434,52 @@ export default function Home() {
         setEmailDrafts(drafts);
     } catch (error) {
       setIsEmailDialogOpen(false);
+=======
+    if (selectedCandidates.length === 0 || !selectedJob) {
+      toast({ variant: 'destructive', title: 'No candidates selected.', description: "Please select at least one candidate to proceed." });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const response = await fetch(`http://localhost:8000/jobs/${selectedJob.id}/select`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // The backend will fetch the top candidates based on score, so we just send the desired count.
+        body: JSON.stringify({ count: selectedCandidates.length }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to select candidates.');
+      }
+
+      toast({ title: 'Candidates Selected', description: 'The top candidates have been marked for the next steps.' });
+      // The UI will update automatically via the Firestore snapshot listener.
+
+    } catch (error) {
+      console.error("Error selecting candidates:", error);
+      toast({
+        variant: "destructive",
+        title: "Selection Failed",
+        description: error instanceof Error ? error.message : "An unknown error occurred.",
+      });
+>>>>>>> 51e23ed (feat:Next.js frontend and Python backend):src/app/page.tsx
     } finally {
-      setIsGeneratingEmails(false);
+      setIsProcessing(false);
     }
   };
 
+<<<<<<< HEAD:frontend/src/app/page.tsx
   const handleSendEmails = async () => {
     const selectedCandidates = candidates.filter(c => c.selected);
     if (selectedCandidates.length === 0 || !selectedJob || !interviewDate) return;
+=======
+  const handleSendConfirmationEmails = async () => {
+    if (!selectedJob) return;
+>>>>>>> 51e23ed (feat:Next.js frontend and Python backend):src/app/page.tsx
 
     setIsSendingEmails(true);
 
@@ -355,6 +488,7 @@ export default function Home() {
     fullInterviewDate.setHours(hours, minutes);
 
     try {
+<<<<<<< HEAD:frontend/src/app/page.tsx
         await apiFetch(`/api/emails/send`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -372,11 +506,37 @@ export default function Home() {
         setIsEmailDialogOpen(false);
     } catch (error) {
         // Error toast handled by apiFetch
+=======
+      const response = await fetch(`http://localhost:8000/jobs/${selectedJob.id}/send-emails`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to send emails.');
+      }
+      
+      const result = await response.json();
+      toast({
+        title: 'Email Process Completed',
+        description: `${result.sent_count} emails sent, ${result.failed_count} failed.`,
+      });
+      // UI will update via snapshot listener as candidate statuses change to 'contacted'
+
+    } catch (error) {
+      console.error("Error sending emails:", error);
+      toast({
+        variant: "destructive",
+        title: "Emailing Failed",
+        description: error instanceof Error ? error.message : "An unknown error occurred.",
+      });
+>>>>>>> 51e23ed (feat:Next.js frontend and Python backend):src/app/page.tsx
     } finally {
-        setIsSendingEmails(false);
+      setIsSendingEmails(false);
     }
   };
 
+<<<<<<< HEAD:frontend/src/app/page.tsx
   const handleConnectToCalendar = async () => {
     try {
         const data = await apiFetch('/api/auth/google');
@@ -384,6 +544,44 @@ export default function Home() {
     } catch (error) {
         // Error toast handled by apiFetch
     }
+=======
+  const handleScheduleInterviews = async () => {
+    if (!selectedJob) return;
+
+    setIsProcessing(true); // A generic loading state
+    try {
+      const response = await fetch(`http://localhost:8000/jobs/${selectedJob.id}/schedule-interviews`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to schedule interviews.');
+      }
+      
+      const result = await response.json();
+      toast({
+        title: 'Scheduling Process Completed',
+        description: `${result.scheduled_count} interviews scheduled, ${result.failed_count} failed.`,
+      });
+      // UI will update via snapshot listener as candidate statuses change to 'scheduled'
+
+    } catch (error) {
+      console.error("Error scheduling interviews:", error);
+      toast({
+        variant: "destructive",
+        title: "Scheduling Failed",
+        description: error instanceof Error ? error.message : "An unknown error occurred.",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleConnectToCalendar = () => {
+    // Redirect directly to the backend authorization endpoint
+    window.location.href = 'http://localhost:8000/authorize';
+>>>>>>> 51e23ed (feat:Next.js frontend and Python backend):src/app/page.tsx
   }
 
   
@@ -522,12 +720,51 @@ export default function Home() {
                 <CardHeader>
                     <CardTitle>Next Steps</CardTitle>
                 </CardHeader>
-                <CardContent>
-                    <p>Selected {selectedCount} candidate(s). Proceed to the next step to schedule interviews and draft emails.</p>
-                    <Button className="mt-4 bg-accent hover:bg-accent/90" disabled={selectedCount === 0} onClick={() => setIsSchedulingDialogOpen(true)}>
-                        <Send className="mr-2"/>
-                        Schedule & Draft Emails
-                    </Button>
+                <CardContent className="space-y-4">
+                    {(() => {
+                        const hasSelectedInUI = candidates.some(c => c.selected);
+                        const hasConfirmedSelection = candidates.some(c => c.status === 'selected');
+                        const hasContacted = candidates.some(c => c.status === 'contacted');
+                        const hasScheduled = candidates.some(c => c.status === 'scheduled');
+
+                        if (hasScheduled) {
+                            return <p className="text-green-600 font-semibold">Workflow complete! All selected candidates have been scheduled.</p>;
+                        }
+
+                        if (hasContacted) {
+                            return (
+                                <div>
+                                    <p>Emails have been sent. Ready to schedule interviews.</p>
+                                    <Button className="mt-4" onClick={handleScheduleInterviews} disabled={isProcessing}>
+                                        {isProcessing ? <Loader2 className="animate-spin" /> : <CalendarIcon className="mr-2"/>}
+                                        3. Schedule Interviews
+                                    </Button>
+                                </div>
+                            );
+                        }
+
+                        if (hasConfirmedSelection) {
+                            return (
+                                <div>
+                                    <p>Candidates have been selected. Ready to send confirmation emails.</p>
+                                    <Button className="mt-4" onClick={handleSendConfirmationEmails} disabled={isSendingEmails}>
+                                        {isSendingEmails ? <Loader2 className="animate-spin" /> : <Send className="mr-2"/>}
+                                        2. Send Confirmation Emails
+                                    </Button>
+                                </div>
+                            );
+                        }
+
+                        return (
+                            <div>
+                                <p>You have chosen {selectedCount} candidate(s) in the UI. Confirm your selection to proceed.</p>
+                                <Button className="mt-4" onClick={handleSelectCandidates} disabled={selectedCount === 0 || isProcessing}>
+                                    {isProcessing ? <Loader2 className="animate-spin" /> : <Check className="mr-2"/>}
+                                    1. Confirm Selected Candidates
+                                </Button>
+                            </div>
+                        );
+                    })()}
                 </CardContent>
             </Card>
         )}
@@ -610,75 +847,14 @@ export default function Home() {
             </main>
         </SidebarInset>
 
-        <Dialog open={isSchedulingDialogOpen} onOpenChange={setIsSchedulingDialogOpen}>
-            <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                    <DialogTitle>Schedule Interview</DialogTitle>
-                    <DialogDescription>
-                        Select a date and time for the interview for the {selectedCount} selected candidate(s).
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="interview-date" className="text-right">
-                            Date
-                        </Label>
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button
-                                variant={"outline"}
-                                className={cn(
-                                    "col-span-3 justify-start text-left font-normal",
-                                    !interviewDate && "text-muted-foreground"
-                                )}
-                                >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {interviewDate ? format(interviewDate, "PPP") : <span>Pick a date</span>}
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0">
-                                <Calendar
-                                mode="single"
-                                selected={interviewDate}
-                                onSelect={setInterviewDate}
-                                initialFocus
-                                />
-                            </PopoverContent>
-                        </Popover>
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="interview-time" className="text-right">
-                            Time
-                        </Label>
-                         <Input
-                            id="interview-time"
-                            type="time"
-                            value={interviewTime}
-                            onChange={(e) => setInterviewTime(e.target.value)}
-                            className="col-span-3"
-                        />
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button variant="ghost" onClick={() => setIsSchedulingDialogOpen(false)}>Cancel</Button>
-                    <Button onClick={handleProceedToEmail} disabled={!interviewDate || !interviewTime}>Proceed to Draft Email</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
         
-        <EmailPreviewDialog
-            isOpen={isEmailDialogOpen}
-            onOpenChange={setIsEmailDialogOpen}
-            drafts={emailDrafts}
-            isLoading={isGeneratingEmails}
-            isSending={isSendingEmails}
-            selectedCount={selectedCount}
-            onSend={handleSendEmails}
-        />
     </div>
   );
 }
 
     
+<<<<<<< HEAD:frontend/src/app/page.tsx
 
     
+=======
+>>>>>>> 51e23ed (feat:Next.js frontend and Python backend):src/app/page.tsx

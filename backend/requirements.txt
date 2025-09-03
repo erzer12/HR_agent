@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Web Framework and Server
 fastapi
 uvicorn[standard]
@@ -15,3 +16,14 @@ google-auth-oauthlib
 
 # For loading environment variables from a .env file
 python-dotenv
+=======
+fastapi
+uvicorn[standard]
+python-dotenv
+google-generativeai
+firebase-admin
+resend
+pydantic
+google-api-python-client
+google-auth-oauthlib
+>>>>>>> 51e23ed (feat:Next.js frontend and Python backend)
