@@ -18,14 +18,19 @@ First, start the Python backend server. From the project root directory, run the
 # Navigate to the backend directory
 cd backend
 
-# It is highly recommended to use a Python virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+# (Recommended) It is highly recommended to use a Python virtual environment
+# python -m venv venv
+# source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
 
-# Install the required Python packages
+#
+# !! IMPORTANT !!
+# You must install the Python dependencies before starting the server.
+#
 pip install -r requirements.txt
 
-# Run the FastAPI server
+#
+# Now, you can run the FastAPI server
+#
 uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 You can verify the backend is running by opening `http://localhost:8000/api` in your browser. You should see `{"message":"ResumeRank API is running"}`.
