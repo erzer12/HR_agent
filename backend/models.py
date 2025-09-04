@@ -1,9 +1,22 @@
 # backend/models.py
 
 from pydantic import BaseModel, EmailStr
-from typing import List, Optional, Dict
+from typing import List, Optional
+
+# --- Candidate Models ---
+class Candidate(BaseModel):
+    """Pydantic model for a candidate."""
+    candidateName: str
+    candidateEmail: EmailStr
+    suitabilityScore: float
+    summary: str
 
 # --- Job Management Models ---
+class JobCreate(BaseModel):
+    """Pydantic model for creating a new job."""
+    title: str
+    jobDescription: str
+
 class JobUpdate(BaseModel):
     """Pydantic model for updating a job's title or description."""
     title: Optional[str] = None
@@ -21,8 +34,6 @@ class EmailSendRequest(BaseModel):
     jobId: str
     interviewDatetime: str
     candidateIds: List[str]
-    # userGoogleTokens is removed from here for security.
-    # The backend will retrieve the tokens from Firestore.
 
 class DraftedEmail(BaseModel):
     """Model for a single drafted email to be returned to the frontend."""

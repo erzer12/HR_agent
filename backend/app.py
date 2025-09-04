@@ -1,19 +1,20 @@
 
-# backend/app.py
-
 from datetime import datetime, timedelta
 from typing import List
 
-from fastapi import FastAPI, File, Form, UploadFile, HTTPException, BackgroundTasks, Request, Response
+from fastapi import (FastAPI, File, Form, UploadFile, HTTPException, 
+                     BackgroundTasks, Request, Response, Depends)
 from fastapi.middleware.cors import CORSMiddleware
 from google_auth_oauthlib.flow import Flow
+from starlette.responses import RedirectResponse
 
 # Import services
 from services import resume_processing, email_agent, calendar
 import services.firestore_client as db
 
 # Import Pydantic models and config
-from models import JobUpdate, EmailDraftRequest, EmailSendRequest, DraftedEmail, AuthURL
+from models import (JobUpdate, EmailDraftRequest, EmailSendRequest, 
+                    DraftedEmail, AuthURL, Candidate, JobCreate)
 import config
 
 # --- FastAPI App Initialization ---
@@ -24,7 +25,6 @@ app = FastAPI(
 )
 
 # --- CORS Middleware ---
-# This allows the frontend (running on http://localhost:9002) to communicate with this backend.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[config.FRONTEND_URL, "http://localhost:9002"],
@@ -39,7 +39,6 @@ async def process_resumes_task(job_id: str, job_description: str, resumes: List[
     try:
         for resume in resumes:
             content_bytes = await resume.read()
-            # Try decoding with utf-8, fallback to latin-1 for broader compatibility
             try:
                 content = content_bytes.decode('utf-8')
             except UnicodeDecodeError:
@@ -129,11 +128,12 @@ async def draft_emails_for_candidates(request: EmailDraftRequest):
         raise HTTPException(status_code=404, detail="No specified candidates found.")
 
     drafts = []
-    for candidate in candidates:
-        email_content = email_agent.draft_email(job, candidate, request.interviewDatetime)
+    for candidate_data in candidates:
+        candidate = Candidate(**candidate_data)
+        email_content = email_agent.draft_email(job, candidate.model_dump(), request.interviewDatetime)
         drafts.append(DraftedEmail(
-            candidateName=candidate.get("candidateName"),
-            candidateEmail=candidate.get("candidateEmail"),
+            candidateName=candidate.candidateName,
+            candidateEmail=candidate.candidateEmail,
             **email_content
         ))
     return drafts
@@ -149,28 +149,25 @@ async def send_emails_and_create_events(request: EmailSendRequest):
         raise HTTPException(status_code=404, detail="No specified candidates found.")
 
     start_time = datetime.fromisoformat(request.interviewDatetime)
-    end_time = start_time + timedelta(minutes=30)  # Assume 30-minute interviews
+    end_time = start_time + timedelta(minutes=30)
 
-    # This is a placeholder user_id. In a real app, you would get this
-    # from your authentication system (e.g., the logged-in user's ID).
-    user_id = "placeholder_user_id"
+    user_id = "placeholder_user_id" 
     user_tokens = db.get_user_tokens(user_id)
     if not user_tokens:
-        raise HTTPException(status_code=401, detail="User is not authenticated with Google or tokens are missing.")
+        raise HTTPException(status_code=401, detail="User not authenticated with Google.")
 
+    for candidate_data in candidates:
+        candidate = Candidate(**candidate_data)
+        email_content = email_agent.draft_email(job, candidate.model_dump(), request.interviewDatetime)
+        
+        # email_agent.send_email(candidate.candidateEmail, email_content['subject'], email_content['body'])
 
-    for candidate in candidates:
-        # 1. Send Email (This is mocked - integrate a real service like SendGrid or Resend here)
-        email_content = email_agent.draft_email(job, candidate, request.interviewDatetime)
-        print(f"SIMULATING SENDING EMAIL TO: {candidate['candidateEmail']} with subject: {email_content['subject']}")
-
-        # 2. Create Google Calendar Event
         event_details = {
-            "summary": f"Interview: {job['title']} with {candidate['candidateName']}",
+            "summary": f"Interview: {job['title']} with {candidate.candidateName}",
             "description": f"Interview for the {job['title']} position.",
             "start_time": start_time.isoformat(),
             "end_time": end_time.isoformat(),
-            "attendees": [candidate['candidateEmail']], # In a real app, add the interviewer's email too
+            "attendees": [candidate.candidateEmail],
         }
         calendar.create_calendar_event(user_tokens, event_details)
 
@@ -179,8 +176,6 @@ async def send_emails_and_create_events(request: EmailSendRequest):
 
 # === Google Authentication ===
 def get_google_flow():
-    """Helper to create a Google OAuth Flow instance."""
-    # This requires a client_secret.json file from Google Cloud Console
     return Flow.from_client_secrets_file(
         "client_secret.json", 
         scopes=config.GOOGLE_API_SCOPES,
@@ -190,18 +185,19 @@ def get_google_flow():
 @app.get("/api/auth/google", response_model=AuthURL)
 async def google_auth():
     flow = get_google_flow()
-    auth_url, _ = flow.authorization_url(
-        access_type='offline', 
-        prompt='consent' # Forces the refresh token to be sent every time
-    )
+    auth_url, _ = flow.authorization_url(access_type='offline', prompt='consent')
     return {"url": auth_url}
 
 @app.get("/api/auth/google/callback")
 async def google_auth_callback(request: Request):
     flow = get_google_flow()
-    flow.fetch_token(authorization_response=str(request.url))
-    creds = flow.credentials
+    try:
+        flow.fetch_token(authorization_response=str(request.url))
+    except Exception as e:
+        print(f"Error fetching token: {e}")
+        raise HTTPException(status_code=400, detail="Error fetching token")
 
+    creds = flow.credentials
     tokens = {
         'token': creds.token,
         'refresh_token': creds.refresh_token,
@@ -211,10 +207,6 @@ async def google_auth_callback(request: Request):
         'scopes': creds.scopes
     }
     
-    # In a real app, you would associate these tokens with a logged-in user's ID
-    # For this example, we use a placeholder ID and store the tokens.
     db.store_user_tokens("placeholder_user_id", tokens)
     
     return RedirectResponse(url=f"{config.FRONTEND_URL}?calendar=connected")
-
-    

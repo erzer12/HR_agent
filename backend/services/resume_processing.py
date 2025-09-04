@@ -1,39 +1,46 @@
-# backend/services/resume_processing.py
+import os
+import google.generativeai as genai
+import json
 
-from typing import Dict
-import re
-import random
+# Get the Gemini API key from environment variables
+gemini_api_key = os.getenv("GEMINI_API_KEY")
 
-def process_resume(job_description: str, resume_content: str) -> Dict:
+# Configure the Gemini API
+genai.configure(api_key=gemini_api_key)
+
+# Create a Gemini model instance
+model = genai.GenerativeModel('gemini-pro')
+
+def process_resume(job_description, resume_content):
     """
-    Analyzes a single resume against a job description.
-
-    NOTE: This is a MOCKED implementation. In a real application, you would
-    replace the logic inside this function with a call to an LLM service
-    (like OpenAI, Anthropic, or Google Gemini) to perform structured data extraction.
-    The prompt to the LLM should ask for a JSON object with a specific schema.
+    Uses the Gemini LLM to analyze a resume against a job description and extract structured data.
     """
-    # Mocked LLM response generation for demonstration purposes
-    email_match = re.search(r'[\w\.-]+@[\w\.-]+', resume_content)
-    email = email_match.group(0) if email_match else "not.found@example.com"
+    prompt = f"""
+    Analyze the following resume based on the provided job description.
+    Return a JSON object with the following fields:
+    - candidateName: The full name of the candidate.
+    - candidateEmail: The email address of the candidate.
+    - suitabilityScore: A score from 0 to 1 indicating how well the candidate's skills and experience match the job description.
+    - summary: A brief summary of the candidate's qualifications and why they are a good fit for the role.
 
-    # A simple way to find a name-like pattern
-    name_match = re.search(r'([A-Z][a-z]+(?: [A-Z][a-z]+)?)', resume_content)
-    name = name_match.group(0) if name_match else "Jane Doe"
+    Job Description:
+    {job_description}
 
-    # Mocked suitability score
-    score = round(random.uniform(0.65, 0.98), 2)
+    Resume:
+    {resume_content}
+    """
 
-    # Mocked summary
-    summary = (
-        f"This candidate shows strong potential based on their resume. "
-        f"They appear to meet several key requirements mentioned in the job description. "
-        f"Their skills align well with the role, making them a suitable candidate for an interview."
-    )
-
-    return {
-        "candidateName": name,
-        "candidateEmail": email,
-        "suitabilityScore": score,
-        "summary": summary,
-    }
+    try:
+        response = model.generate_content(prompt)
+        # The response is in markdown format, so we need to clean it up
+        cleaned_response = response.text.strip().replace('```json', '').replace('```', '')
+        return json.loads(cleaned_response)
+    except Exception as e:
+        print(f"Error processing resume with Gemini: {e}")
+        # Fallback to a default error response
+        return {
+            "candidateName": "N/A",
+            "candidateEmail": "N/A",
+            "suitabilityScore": 0,
+            "summary": "Error processing resume."
+        }
